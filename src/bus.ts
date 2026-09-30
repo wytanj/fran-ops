@@ -254,9 +254,7 @@ export async function openFranbirdTell(
          join tasks t on t.opened_event_id = e.id
          join outbox o on o.event_id = e.id and o.card_template = 'draft_for_approve'
          join outbox a on a.event_id = e.id and a.card_template = 'ack'
-           
          join outbox d on d.event_id = e.id and d.card_template = 'dm_ack'
-           
          where e.idempotency_key = $1`,
         [input.idempotencyKey],
       );

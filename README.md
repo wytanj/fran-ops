@@ -40,7 +40,7 @@ Any other reaction is ignored. The stamp applies only after the card has a `mess
 
 `/fran` accepts one of `shift_open`, `shift_close`, `incident`, or `hand_off`. A second word is rejected. Free-text New Task is rejected.
 
-`app_mention` on `@franbird tell <@U…> <message> briefing=optional|required` opens a structured `tell` task (not free-text New Task). Looks up actor and assignee via `staff_identities`. Sets `tasks.briefing_required` when briefing is `required` (stub flag for a later daily briefing job). Enqueues channel ack + assignee DM ack (`card_template=ack`) plus a draft-for-approve card; `publishPending` posts them with `chat.postMessage`.
+An `app_mention` whose text matches `tell <@U012ABC> <message> briefing=optional` or `briefing=required` opens a `tell` task. The actor and the assignee must both be rows in `staff_identities`. `briefing=required` sets `tasks.briefing_required`. The bus enqueues a channel ack, an assignee DM ack, and a `draft_for_approve` card. `publishPending` posts those three Slack rows. A failed mention is the only case that replies in the thread. A successful mention does not post a second ack.
 
 `card.approve` writes `card.approved`. `card.send_back` writes `card.sent_back`.
 
@@ -50,13 +50,12 @@ Any other reaction is ignored. The stamp applies only after the card has a `mess
 
 | Var | Required | Notes |
 | --- | --- | --- |
-| `SLACK_BOT_TOKEN` | yes | Bot token (`xoxb-…`) for Events API + `chat.postMessage` |
+| `SLACK_BOT_TOKEN` | yes | Bot token for the Events API and `chat.postMessage` |
 | `SLACK_SIGNING_SECRET` | yes | Request signature verification |
 | `DATABASE_URL` | yes | Postgres connection string for the bus |
-| `PORT` | no | HTTP listen port, default `3000` |
-| `SLACK_APP_TOKEN` | no | App-level token (`xapp-…`) only if you switch on Socket Mode later; HTTP Events API is the default (`socketMode: false`) |
+| `PORT` | no | HTTP listen port, default 3000 |
 
-`bun start` reads those. The process calls `publishPending` every 5 seconds (bus → Slack outbound).
+`bun start` reads those. The process calls `publishPending` every 5 seconds and posts pending Slack rows.
 
 ## Outbox and cards
 

@@ -107,8 +107,9 @@ export function createSlackApp(opts: {
       slackUserId: event.user,
       text: event.text,
     });
-    // Channel ack also goes through outbox→chat.postMessage; ephemeral say is a fast path.
-    await say({ text: result.reply, thread_ts: typeof event.ts === "string" ? event.ts : undefined });
+    if (!result.ok) {
+      await say({ text: result.reply, thread_ts: typeof event.ts === "string" ? event.ts : undefined });
+    }
   });
 
   app.event("reaction_added", async ({ event }) => {
@@ -157,11 +158,8 @@ export async function startFromEnv(env: NodeJS.ProcessEnv = process.env): Promis
   const botToken = env.SLACK_BOT_TOKEN ?? "";
   const signingSecret = env.SLACK_SIGNING_SECRET ?? "";
   const databaseUrl = env.DATABASE_URL ?? "";
-  // SLACK_APP_TOKEN (xapp-*) only needed if socketMode is enabled later; HTTP Events API is default.
-  const _appToken = env.SLACK_APP_TOKEN ?? "";
-  void _appToken;
   if (botToken === "" || signingSecret === "" || databaseUrl === "") {
-    throw new Error("SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, and DATABASE_URL are required (SLACK_APP_TOKEN optional for socket mode)");
+    throw new Error("SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, and DATABASE_URL are required");
   }
   const port = Number(env.PORT ?? "3000");
   if (!Number.isInteger(port) || port <= 0) throw new Error("PORT must be a positive integer");

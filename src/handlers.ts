@@ -198,7 +198,7 @@ export async function handleAppMention(
   if (!opened.ok) return { ok: false, reply: replyFor(opened.reason) };
   return {
     ok: true,
-    reply: `Logged tell → ${opened.value.title} (briefing ${parsed.value.briefing}).`,
+    reply: `Logged ${opened.value.title}. Briefing ${parsed.value.briefing}.`,
     taskId: opened.value.taskId,
   };
 }
