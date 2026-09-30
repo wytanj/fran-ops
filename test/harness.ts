@@ -11,17 +11,17 @@ export const migrationSql = readFileSync(join(root, "migrations", "001_bus.sql")
 export async function freshDb(): Promise<Db> {
   const pg = new PGlite();
   await pg.exec(migrationSql);
-  const query: Query = async (text, params = []) => {
+  const query: Query = async <T>(text: string, params: unknown[] = []): Promise<T[]> => {
     const result = await pg.query(text, params);
-    return result.rows;
+    return result.rows as T[];
   };
   return {
     query,
     async transaction(fn) {
       return pg.transaction(async (tx) => {
-        const scoped: Query = async (text, params = []) => {
+        const scoped: Query = async <T>(text: string, params: unknown[] = []): Promise<T[]> => {
           const result = await tx.query(text, params);
-          return result.rows;
+          return result.rows as T[];
         };
         return fn(scoped);
       });

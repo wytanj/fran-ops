@@ -1,5 +1,5 @@
 import { findGrant, type ChannelGrant } from "./allowlist.ts";
-import { draftForApproveCard } from "./cards.ts";
+import { ackCard, draftForApproveCard, franbirdTellCard } from "./cards.ts";
 import type { Db, Query } from "./db.ts";
 import {
   STAMP_TO_STATUS,
@@ -16,6 +16,7 @@ import {
   type Surface,
   type TaskId,
   type TaskStatus,
+  type BriefingMode,
   type TaskTemplateKey,
   type TelegramUserId,
 } from "./domain.ts";
@@ -194,6 +195,193 @@ export async function openTask(
   });
 }
 
+
+export async function openFranbirdTell(
+  db: Db,
+  input: {
+    grants: readonly ChannelGrant[];
+    openerStaffId: StaffId;
+    assigneeStaffId: StaffId;
+    assigneeSlackUserId: SlackUserId;
+    surface: Surface;
+    channelId: ChannelId;
+    body: string;
+    briefing: BriefingMode;
+    idempotencyKey: string;
+  },
+): Promise<Result<OpenedTask & { ackOutboxId: string; dmOutboxId: string }>> {
+  const grant = findGrant(input.grants, input.surface, input.channelId);
+  if (grant === null) return { ok: false, reason: "channel_not_allowlisted" };
+  if (!(await staffExists(db.query, input.openerStaffId))) return { ok: false, reason: "unknown_staff" };
+  if (!(await staffExists(db.query, input.assigneeStaffId))) return { ok: false, reason: "unknown_assignee" };
+  const briefingRequired = input.briefing === "required";
+  const title = TASK_TEMPLATES.tell.title;
+
+  return db.transaction(async (query) => {
+    await ensureChannel(query, grant);
+    const inserted = await query<{ id: string }>(
+      `insert into events (event_type, surface, actor_staff_id, idempotency_key, payload)
+       values ('task.opened', $1, $2, $3, $4::jsonb)
+       on conflict (idempotency_key) do nothing
+       returning id`,
+      [
+        input.surface,
+        input.openerStaffId,
+        input.idempotencyKey,
+        JSON.stringify({
+          templateKey: "tell",
+          channelId: input.channelId,
+          assigneeStaffId: input.assigneeStaffId,
+          briefing: input.briefing,
+          body: input.body,
+        }),
+      ],
+    );
+    const freshId = inserted[0]?.id;
+    if (freshId === undefined) {
+      const existing = await query<{
+        taskId: string;
+        title: string;
+        status: string;
+        eventId: string;
+        outboxId: string;
+        ackOutboxId: string;
+        dmOutboxId: string;
+      }>(
+        `select t.id as "taskId", t.title, t.status, e.id as "eventId",
+                o.id as "outboxId", a.id as "ackOutboxId", d.id as "dmOutboxId"
+         from events e
+         join tasks t on t.opened_event_id = e.id
+         join outbox o on o.event_id = e.id and o.card_template = 'draft_for_approve'
+         join outbox a on a.event_id = e.id and a.card_template = 'ack'
+           
+         join outbox d on d.event_id = e.id and d.card_template = 'dm_ack'
+           
+         where e.idempotency_key = $1`,
+        [input.idempotencyKey],
+      );
+      const row = existing[0];
+      if (row === undefined) throw new Error("franbird tell event has no task");
+      return {
+        ok: true,
+        value: {
+          taskId: row.taskId,
+          eventId: row.eventId,
+          outboxId: row.outboxId,
+          ackOutboxId: row.ackOutboxId,
+          dmOutboxId: row.dmOutboxId,
+          title: row.title,
+          status: asTaskStatus(row.status),
+          created: false,
+        },
+      };
+    }
+
+    const tasks = await query<{ id: string }>(
+      `insert into tasks (
+         template_key, title, channel_surface, channel_id,
+         opener_staff_id, assignee_staff_id, briefing_required, opened_event_id
+       ) values ('tell', $1, $2, $3, $4, $5, $6, $7)
+       returning id`,
+      [
+        title,
+        input.surface,
+        input.channelId,
+        input.openerStaffId,
+        input.assigneeStaffId,
+        briefingRequired,
+        freshId,
+      ],
+    );
+    const taskId = tasks[0]?.id;
+    if (taskId === undefined) throw new Error("tell task insert returned no id");
+
+    const card = franbirdTellCard({
+      taskId,
+      body: input.body,
+      openerStaffId: input.openerStaffId,
+      assigneeStaffId: input.assigneeStaffId,
+      briefing: input.briefing,
+    });
+    const outbox = await query<{ id: string }>(
+      `insert into outbox (event_id, destination, card_template, payload)
+       values ($1, 'slack', 'draft_for_approve', $2::jsonb)
+       returning id`,
+      [
+        freshId,
+        JSON.stringify({
+          channelId: input.channelId,
+          taskId,
+          text: card.text,
+          blocks: card.blocks,
+          bindMessageRef: true,
+        }),
+      ],
+    );
+    const outboxId = outbox[0]?.id;
+    if (outboxId === undefined) throw new Error("tell outbox insert returned no id");
+
+    const channelAck = ackCard({
+      taskId,
+      text: `Logged tell for <@${input.assigneeSlackUserId}> (briefing ${input.briefing}).`,
+    });
+    const ack = await query<{ id: string }>(
+      `insert into outbox (event_id, destination, card_template, payload)
+              values ($1, 'slack', 'ack', $2::jsonb)
+       returning id`,
+      [
+        freshId,
+        JSON.stringify({
+          kind: "channel_ack",
+          channelId: input.channelId,
+          taskId,
+          text: channelAck.text,
+          blocks: channelAck.blocks,
+          bindMessageRef: false,
+        }),
+      ],
+    );
+    const ackOutboxId = ack[0]?.id;
+    if (ackOutboxId === undefined) throw new Error("channel ack outbox insert returned no id");
+
+    const dmAck = ackCard({
+      taskId,
+      text: `Franbird tell from staff ${input.openerStaffId}: ${input.body} (briefing ${input.briefing})`,
+    });
+    const dm = await query<{ id: string }>(
+      `insert into outbox (event_id, destination, card_template, payload)
+              values ($1, 'slack', 'dm_ack', $2::jsonb)
+       returning id`,
+      [
+        freshId,
+        JSON.stringify({
+          kind: "dm_ack",
+          channelId: input.assigneeSlackUserId,
+          taskId,
+          text: dmAck.text,
+          blocks: dmAck.blocks,
+          bindMessageRef: false,
+        }),
+      ],
+    );
+    const dmOutboxId = dm[0]?.id;
+    if (dmOutboxId === undefined) throw new Error("dm ack outbox insert returned no id");
+
+    return {
+      ok: true,
+      value: {
+        taskId,
+        eventId: freshId,
+        outboxId,
+        ackOutboxId,
+        dmOutboxId,
+        title,
+        status: "open",
+        created: true,
+      },
+    };
+  });
+}
 export async function ingestChannelMessage(
   db: Db,
   input: {

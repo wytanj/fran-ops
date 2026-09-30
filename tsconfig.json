@@ -8,6 +8,7 @@
     "skipLibCheck": true,
     "types": ["bun"],
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true
   },

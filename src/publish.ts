@@ -1,9 +1,10 @@
+import type { KnownBlock } from "@slack/types";
 import type { Db } from "./db.ts";
 
 export type SlackPost = {
   channel: string;
   text: string;
-  blocks: unknown[];
+  blocks: KnownBlock[];
 };
 
 export type SlackPoster = {
@@ -14,14 +15,27 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function readPayload(value: unknown): SlackPost & { taskId: string } {
+function readPayload(value: unknown): SlackPost & { taskId: string; bindMessageRef: boolean } {
   const raw = typeof value === "string" ? JSON.parse(value) : value;
   if (!isRecord(raw)) throw new Error("outbox payload is not an object");
-  const { channelId, taskId, text, blocks } = raw;
+  const { channelId, taskId, text, blocks, bindMessageRef } = raw;
   if (typeof channelId !== "string" || typeof taskId !== "string" || typeof text !== "string" || !Array.isArray(blocks)) {
     throw new Error("outbox payload is missing card fields");
   }
-  return { channel: channelId, text, blocks, taskId };
+  const parsedBlocks: KnownBlock[] = [];
+  for (const block of blocks) {
+    if (!isRecord(block) || typeof block.type !== "string") {
+      throw new Error("outbox payload block is not a Slack block");
+    }
+    parsedBlocks.push(block as unknown as KnownBlock);
+  }
+  return {
+    channel: channelId,
+    text,
+    blocks: parsedBlocks,
+    taskId,
+    bindMessageRef: bindMessageRef === false ? false : true,
+  };
 }
 
 export async function publishPending(
@@ -68,12 +82,14 @@ export async function publishPending(
            where id = $1 and status = 'publishing'`,
           [row.id],
         );
-        await query(
-          `update tasks
-           set message_ref = $2, updated_at = now()
-           where id = $1 and message_ref is null`,
-          [card.taskId, sent.ts],
-        );
+        if (card.bindMessageRef) {
+          await query(
+            `update tasks
+             set message_ref = $2, updated_at = now()
+             where id = $1 and message_ref is null`,
+            [card.taskId, sent.ts],
+          );
+        }
       });
       published += 1;
     } catch (error) {

@@ -1,7 +1,8 @@
 import { findGrant, type ChannelGrant } from "./allowlist.ts";
-import { applyStamp, findStaffBySurface, ingestChannelMessage, openTask, recordCardDecision } from "./bus.ts";
+import { applyStamp, findStaffBySurface, ingestChannelMessage, openFranbirdTell, openTask, recordCardDecision } from "./bus.ts";
 import type { Db } from "./db.ts";
 import {
+  parseFranbirdTell,
   parseFranText,
   parseSlackChannelId,
   parseSlackUserId,
@@ -29,6 +30,10 @@ function replyFor(reason: BusReason): string {
       return "That message is not a task card.";
     case "unknown_task":
       return "That task does not exist.";
+    case "unknown_assignee":
+      return "That person is not linked in staff_identities.";
+    case "bad_franbird":
+      return "Use: @franbird tell <@user> <message> briefing=optional|required";
     default: {
       const exhaustive: never = reason;
       return exhaustive;
@@ -152,4 +157,48 @@ export async function handleCardAction(
     idempotencyKey: `slack:action:${slackUserId}:${input.actionId}:${taskId}:${input.actionTs}`,
   });
   return { recorded: result.ok };
+}
+
+
+export async function handleAppMention(
+  db: Db,
+  grants: readonly ChannelGrant[],
+  input: {
+    eventId: string;
+    channelId: string;
+    slackUserId: string;
+    text: string;
+  },
+): Promise<{ ok: boolean; reply: string; taskId?: string }> {
+  const channelId = parseSlackChannelId(input.channelId);
+  const slackUserId = parseSlackUserId(input.slackUserId);
+  if (channelId === null || slackUserId === null || input.eventId.trim() === "") {
+    return { ok: false, reply: replyFor("bad_payload") };
+  }
+  if (findGrant(grants, "slack", channelId) === null) {
+    return { ok: false, reply: replyFor("channel_not_allowlisted") };
+  }
+  const parsed = parseFranbirdTell(input.text);
+  if (!parsed.ok) return { ok: false, reply: replyFor(parsed.reason) };
+  const opener = await findStaffBySurface(db, "slack", slackUserId);
+  if (opener === null) return { ok: false, reply: replyFor("unknown_staff") };
+  const assignee = await findStaffBySurface(db, "slack", parsed.value.assigneeSlackUserId);
+  if (assignee === null) return { ok: false, reply: replyFor("unknown_assignee") };
+  const opened = await openFranbirdTell(db, {
+    grants,
+    openerStaffId: requireStaffId(opener.staffId),
+    assigneeStaffId: requireStaffId(assignee.staffId),
+    assigneeSlackUserId: parsed.value.assigneeSlackUserId,
+    surface: "slack",
+    channelId,
+    body: parsed.value.body,
+    briefing: parsed.value.briefing,
+    idempotencyKey: `slack:app_mention:${input.eventId}`,
+  });
+  if (!opened.ok) return { ok: false, reply: replyFor(opened.reason) };
+  return {
+    ok: true,
+    reply: `Logged tell → ${opened.value.title} (briefing ${parsed.value.briefing}).`,
+    taskId: opened.value.taskId,
+  };
 }

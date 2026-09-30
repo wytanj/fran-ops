@@ -1,5 +1,5 @@
 import type { KnownBlock } from "@slack/types";
-import type { TaskTemplateKey } from "./domain.ts";
+import type { BriefingMode, TaskTemplateKey } from "./domain.ts";
 
 export type SlackCard = {
   text: string;
@@ -41,6 +41,66 @@ export function draftForApproveCard(input: {
             value: input.taskId,
           },
         ],
+      },
+    ],
+  };
+}
+
+export function franbirdTellCard(input: {
+  taskId: string;
+  body: string;
+  openerStaffId: string;
+  assigneeStaffId: string;
+  briefing: BriefingMode;
+}): SlackCard {
+  const briefingLabel = input.briefing === "required" ? "required" : "optional";
+  return {
+    text: `Franbird tell (briefing ${briefingLabel})`,
+    blocks: [
+      {
+        type: "header",
+        text: { type: "plain_text", text: "Franbird tell" },
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*To staff* \`${input.assigneeStaffId}\`\n*From* \`${input.openerStaffId}\`\n*Briefing* ${briefingLabel}\n\n${input.body}`,
+        },
+      },
+      {
+        type: "actions",
+        block_id: `task.${input.taskId}`,
+        elements: [
+          {
+            type: "button",
+            action_id: "card.approve",
+            style: "primary",
+            text: { type: "plain_text", text: "Approve" },
+            value: input.taskId,
+          },
+          {
+            type: "button",
+            action_id: "card.send_back",
+            text: { type: "plain_text", text: "Send back" },
+            value: input.taskId,
+          },
+        ],
+      },
+    ],
+  };
+}
+
+export function ackCard(input: {
+  taskId: string;
+  text: string;
+}): SlackCard {
+  return {
+    text: input.text,
+    blocks: [
+      {
+        type: "section",
+        text: { type: "mrkdwn", text: input.text },
       },
     ],
   };

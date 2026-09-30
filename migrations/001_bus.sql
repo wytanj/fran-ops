@@ -56,7 +56,8 @@ create table tasks (
     'shift_open',
     'shift_close',
     'incident',
-    'hand_off'
+    'hand_off',
+    'tell'
   )),
   title text not null check (length(btrim(title)) > 0),
   status text not null default 'open' check (status in (
@@ -71,6 +72,8 @@ create table tasks (
   channel_id text not null,
   message_ref text,
   opener_staff_id uuid not null references staff_identities (staff_id),
+  assignee_staff_id uuid references staff_identities (staff_id),
+  briefing_required boolean not null default false,
   opened_event_id uuid not null unique references events (id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -108,7 +111,7 @@ create table outbox (
   id uuid primary key default gen_random_uuid(),
   event_id uuid not null references events (id),
   destination text not null check (destination in ('slack', 'telegram')),
-  card_template text not null check (card_template in ('draft_for_approve')),
+  card_template text not null check (card_template in ('draft_for_approve', 'ack', 'dm_ack')),
   payload jsonb not null,
   status text not null default 'pending' check (status in (
     'pending',

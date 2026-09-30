@@ -31,7 +31,7 @@ export type Employment = (typeof EMPLOYMENTS)[number];
 export const STAMP_KINDS = ["claim", "done", "blocked", "hand_off", "escalate"] as const;
 export type StampKind = (typeof STAMP_KINDS)[number];
 
-export const TASK_TEMPLATE_KEYS = ["shift_open", "shift_close", "incident", "hand_off"] as const;
+export const TASK_TEMPLATE_KEYS = ["shift_open", "shift_close", "incident", "hand_off", "tell"] as const;
 export type TaskTemplateKey = (typeof TASK_TEMPLATE_KEYS)[number];
 
 export const TASK_STATUSES = [
@@ -44,7 +44,7 @@ export const TASK_STATUSES = [
 ] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
-export const CARD_TEMPLATES = ["draft_for_approve"] as const;
+export const CARD_TEMPLATES = ["draft_for_approve", "ack", "dm_ack"] as const;
 export type CardTemplate = (typeof CARD_TEMPLATES)[number];
 
 export const OUTBOX_STATUSES = ["pending", "publishing", "published", "failed"] as const;
@@ -55,6 +55,7 @@ export const TASK_TEMPLATES: Record<TaskTemplateKey, { title: string }> = {
   shift_close: { title: "Close shift" },
   incident: { title: "Incident" },
   hand_off: { title: "Hand off" },
+  tell: { title: "Franbird tell" },
 };
 
 export const STAMP_TO_STATUS: Record<StampKind, TaskStatus> = {
@@ -73,6 +74,8 @@ export const REACTION_TO_STAMP: Record<string, StampKind> = {
   rotating_light: "escalate",
 };
 
+export type BriefingMode = "optional" | "required";
+
 export type BusReason =
   | "unknown_template"
   | "free_text"
@@ -80,7 +83,9 @@ export type BusReason =
   | "unknown_staff"
   | "bad_payload"
   | "no_task"
-  | "unknown_task";
+  | "unknown_task"
+  | "unknown_assignee"
+  | "bad_franbird";
 
 export type Ok<T> = { ok: true; value: T };
 export type Err = { ok: false; reason: BusReason };
@@ -130,6 +135,29 @@ export function parseFranText(text: string): Result<{ templateKey: TaskTemplateK
   return { ok: true, value: { templateKey: key } };
 }
 
+
+export function parseFranbirdTell(text: string): Result<{
+  assigneeSlackUserId: SlackUserId;
+  body: string;
+  briefing: BriefingMode;
+}> {
+  let t = text.replace(/^(?:\s*<@U[A-Z0-9]+>\s*)+/g, "").trim();
+  t = t.replace(/^@?franbird\s+/i, "").trim();
+  const match = t.match(
+    /^tell\s+<@(U[A-Z0-9]+)(?:\|[^>]+)?>\s+(.+?)(?:\s+briefing[=:\s]+(optional|required))?\s*$/is,
+  );
+  if (match === null) return { ok: false, reason: "bad_franbird" };
+  const assigneeRaw = match[1];
+  const bodyRaw = match[2];
+  const briefingRaw = match[3];
+  if (assigneeRaw === undefined || bodyRaw === undefined) return { ok: false, reason: "bad_franbird" };
+  const assigneeSlackUserId = parseSlackUserId(assigneeRaw);
+  if (assigneeSlackUserId === null) return { ok: false, reason: "bad_franbird" };
+  const body = bodyRaw.trim();
+  if (body.length === 0) return { ok: false, reason: "bad_franbird" };
+  const briefing: BriefingMode = briefingRaw === "required" ? "required" : "optional";
+  return { ok: true, value: { assigneeSlackUserId, body, briefing } };
+}
 export function stampForReaction(emoji: string): StampKind | null {
   return REACTION_TO_STAMP[emoji] ?? null;
 }

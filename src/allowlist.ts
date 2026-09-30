@@ -6,7 +6,6 @@ export type ChannelGrant = {
   name: string;
 };
 
-// Closed list. An empty array allows no channel. Add a grant in this file.
 export const CHANNEL_ALLOWLIST: readonly ChannelGrant[] = [];
 
 export function findGrant(
