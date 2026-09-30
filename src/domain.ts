@@ -106,6 +106,11 @@ export function parseTelegramUserId(raw: string): TelegramUserId | null {
   return raw as TelegramUserId;
 }
 
+export function parseChannelId(raw: string): ChannelId | null {
+  if (raw.length === 0 || raw !== raw.trim()) return null;
+  return raw as ChannelId;
+}
+
 export function parseSlackChannelId(raw: string): ChannelId | null {
   if (!/^[CG][A-Z0-9]{2,}$/.test(raw)) return null;
   return raw as ChannelId;
@@ -120,9 +125,8 @@ export function parseFranText(text: string): Result<{ templateKey: TaskTemplateK
   if (trimmed.length === 0) return { ok: false, reason: "unknown_template" };
   const parts = trimmed.split(/\s+/);
   const key = parts[0];
-  if (key === undefined) return { ok: false, reason: "unknown_template" };
+  if (key === undefined || !isTaskTemplateKey(key)) return { ok: false, reason: "unknown_template" };
   if (parts.length > 1) return { ok: false, reason: "free_text" };
-  if (!isTaskTemplateKey(key)) return { ok: false, reason: "unknown_template" };
   return { ok: true, value: { templateKey: key } };
 }
 
