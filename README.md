@@ -79,13 +79,14 @@ A thrown post marks the row `failed`. `publishPending` does not pick up a `faile
 
 ## Storage tiers
 
-Media and archives are split across three tiers. Postgres stays an index.
+Media and archives are split across hot index, warm git packs, Supabase Storage blobs, and a Drive folder-purpose index. Postgres stays an index.
 
 | Tier | Where | Role |
 | --- | --- | --- |
-| HOT | Supabase / Postgres (`media_index`) | JIDs, timestamps, tags, staff/task links, pointers only -- **no blobs** |
+| HOT | Supabase / Postgres (`media_index`) | JIDs, timestamps, tags, staff/task links, Storage object paths, optional Drive folder links -- **no blobs**, no long-lived signed URLs |
 | WARM | git `contextpacks/` | Short curated `.md` for agent context; prune/rollup so the repo stays lean |
-| COLD | Google Drive (or object bucket) | Fat PDFs, full WA media, archival packs -- agents open by link from the index |
+| BLOBS | **Supabase Storage** | Primary dump for WA media, PDFs, archival packs -- humans pull via signed URLs minted at read time |
+| Drive | `drive_folders` | Organized human folders: folder id + purpose/context -- **not** the main blob dump |
 
 Slack is the recent human media inbox, not the long-term archive.
 

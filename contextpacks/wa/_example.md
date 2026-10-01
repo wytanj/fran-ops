@@ -4,4 +4,4 @@ Tiny example for layout review. Real packs are written by `src/wacli/ingest.ts`.
 
 ## Pointers
 
-- [cold (pending)](drive://PENDING/whatsapp/example-chat%2Fexample-msg)
+- [storage (pending)](supabase://fran-ops-media/pending/whatsapp/example-chat/example-msg)

@@ -1,13 +1,15 @@
 /**
  * WhatsApp → warm pack + media_index payload stubs.
- * Does NOT upload to Drive or Slack. cold_uri is a placeholder until JT shares a Drive folder.
+ * Primary blobs target Supabase Storage (upload stub TODO).
+ * Does NOT upload to Drive as the dump. Optional Drive folder purpose link is separate.
  */
 
 import {
   assertNoBlobPayload,
   buildWarmPackMarkdown,
-  placeholderColdUri,
+  placeholderSupabaseObjectPath,
   warmWaPackPath,
+  type DriveFolderInsert,
   type MediaIndexInsert,
 } from "../storage.ts";
 import type { WaIngestResult, WaMediaRef, WaTextRef } from "./types.ts";
@@ -25,15 +27,20 @@ function slugFromMessage(chatJid: string, messageId: string): string {
  * Build a short warm markdown pack path + MediaIndex insert for a WA media message.
  * Caller is responsible for writing `warmMarkdown` to disk at `warmPackPath`.
  *
- * TODO: upload local media to Drive and set a real cold_uri (needs JT Drive folder/share).
+ * TODO: upload local media to Supabase Storage and set a real supabase_object_path
+ *       (needs SUPABASE_URL + service role + bucket/policy from JT).
  * TODO: optional post of a recent copy to an allowlisted Slack channel (needs #1 Slack install).
+ * Do not upload to Drive as the primary blob store.
  */
 export function ingestWaMedia(ref: WaMediaRef): WaIngestResult {
   assertNoBlobPayload(ref as unknown as Record<string, unknown>);
   const occurredAt = asDate(ref.occurredAt);
   const slug = slugFromMessage(ref.chatJid, ref.messageId);
   const warmPackPath = warmWaPackPath(occurredAt, slug);
-  const coldUri = placeholderColdUri("whatsapp", `${ref.chatJid}/${ref.messageId}`);
+  const supabaseObjectPath = placeholderSupabaseObjectPath(
+    "whatsapp",
+    `${ref.chatJid}/${ref.messageId}`,
+  );
 
   const summaryParts = [
     `WhatsApp ${ref.kind} from \`${ref.chatJid}\`.`,
@@ -41,14 +48,14 @@ export function ingestWaMedia(ref: WaMediaRef): WaIngestResult {
     ref.localPath
       ? `Local path (not uploaded): \`${ref.localPath}\`.`
       : "No local path yet.",
-    "Cold object: placeholder Drive URI until JT configures the cold folder.",
+    "Blob: placeholder Supabase Storage path until JT configures the bucket/policy.",
   ].filter(Boolean) as string[];
 
   const warmMarkdown = buildWarmPackMarkdown({
     title: `WA ${ref.kind} ${ref.messageId}`,
     summary: summaryParts.join(" "),
     pointers: [
-      { label: "cold (pending)", uri: coldUri },
+      { label: "storage (pending)", uri: `supabase://${supabaseObjectPath}` },
       ...(ref.localPath
         ? [{ label: "local (dev only)", uri: `file://${ref.localPath}` }]
         : []),
@@ -61,7 +68,7 @@ export function ingestWaMedia(ref: WaMediaRef): WaIngestResult {
     occurred_at: occurredAt.toISOString(),
     tags: ["whatsapp", ref.kind],
     warm_pack_path: warmPackPath,
-    cold_uri: coldUri,
+    supabase_object_path: supabaseObjectPath,
     mime_hint: ref.mimeHint ?? null,
     bytes_hint: ref.bytesHint ?? null,
     notes: ref.localPath ? `localPath=${ref.localPath}` : null,
@@ -71,7 +78,7 @@ export function ingestWaMedia(ref: WaMediaRef): WaIngestResult {
 }
 
 /**
- * Build a short warm pack for a WA text message (no cold blob expected).
+ * Build a short warm pack for a WA text message (no blob expected).
  * Still records a media_index row with warm_pack_path only.
  */
 export function ingestWaText(ref: WaTextRef): WaIngestResult {
@@ -93,10 +100,34 @@ export function ingestWaText(ref: WaTextRef): WaIngestResult {
     occurred_at: occurredAt.toISOString(),
     tags: ["whatsapp", "text"],
     warm_pack_path: warmPackPath,
-    notes: "text-only; no cold_uri",
+    notes: "text-only; no supabase_object_path",
   };
 
   return { warmPackPath, warmMarkdown, mediaIndexInsert };
+}
+
+/**
+ * Stub: build a drive_folders insert for a human folder purpose row.
+ * Does not upload blobs to Drive. JT supplies folder_id + purpose when registering.
+ */
+export function linkDriveFolderPurpose(input: {
+  folderId: string;
+  name: string;
+  purpose: string;
+  contextpackPath?: string | null;
+  parentFolderId?: string | null;
+  staffId?: string | null;
+  tags?: string[];
+}): DriveFolderInsert {
+  return {
+    folder_id: input.folderId,
+    name: input.name,
+    purpose: input.purpose,
+    contextpack_path: input.contextpackPath ?? null,
+    parent_folder_id: input.parentFolderId ?? null,
+    staff_id: input.staffId ?? null,
+    tags: input.tags ?? [],
+  };
 }
 
 /**
@@ -109,4 +140,17 @@ export async function writeWarmPack(
   result: WaIngestResult,
 ): Promise<void> {
   await writeFile(result.warmPackPath, result.warmMarkdown);
+}
+
+/**
+ * TODO: upload bytes to Supabase Storage and return the durable object path.
+ * Needs SUPABASE_URL + service role. Do not use Drive as the primary dump.
+ */
+export async function uploadToSupabaseStorage(_opts: {
+  localPath: string;
+  objectPath: string;
+}): Promise<string> {
+  throw new Error(
+    "TODO: uploadToSupabaseStorage — needs SUPABASE_URL + service role + bucket policy",
+  );
 }

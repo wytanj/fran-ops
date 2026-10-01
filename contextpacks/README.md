@@ -1,6 +1,6 @@
 # contextpacks (warm tier)
 
-Short curated markdown for agent context. This is the **warm** storage tier.
+Short curated markdown for agent context. This is the **warm (git)** storage tier.
 
 Standing rules: `docs/adr/0003-storage-tiering.md` and `docs/storage-tiers.md`.
 
@@ -8,8 +8,9 @@ Standing rules: `docs/adr/0003-storage-tiering.md` and `docs/storage-tiers.md`.
 
 1. Keep packs lean. Prefer under ~8 KiB of prose per file.
 2. Paths are git-relative and start with `contextpacks/`. No absolute paths, no `..`.
-3. Fat PDFs, full WhatsApp media, and archival quote packs go **cold** (Drive / bucket). Put the link in the pack and on `media_index.cold_uri`.
-4. Postgres holds the **hot** index only (`media_index`), never blobs.
+3. Fat PDFs, full WhatsApp media, and archival quote packs go to **Supabase Storage** (primary blobs). Put the object path in the pack and on `media_index.supabase_object_path`. Mint signed URLs at read time — do not store them.
+4. Google Drive is for **human folder purpose** (`drive_folders`), not the bulk dump. Optionally link a warm pack via `drive_folders.contextpack_path`.
+5. Postgres holds the **hot** index only (`media_index`), never blobs.
 
 ## Layout
 
@@ -28,8 +29,8 @@ contextpacks/
 | Horizon | Action |
 | --- | --- |
 | Last 7 days | Keep detailed daily packs under `wa/YYYY/MM/DD/` |
-| Older than ~1 month | Roll into `wa/YYYY-MM.md`; remove or cold-archive day files |
-| Oversized pack | Move fat excerpts to cold; leave pointers in a short warm file |
+| Older than ~1 month | Roll into `wa/YYYY-MM.md`; remove or Storage-archive day files |
+| Oversized pack | Move fat excerpts to Supabase Storage; leave pointers in a short warm file |
 
 Optional table `contextpack_meta` in `migrations/002_storage_index.sql` tracks path, kind, `last_rolled_at`, and `bytes_approx` for automated prune later.
 
