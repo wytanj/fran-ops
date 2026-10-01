@@ -8,9 +8,9 @@ Standing rules: `docs/adr/0003-storage-tiering.md` and `docs/storage-tiers.md`.
 
 1. Keep packs lean. Prefer under ~8 KiB of prose per file.
 2. Paths are git-relative and start with `contextpacks/`. No absolute paths, no `..`.
-3. Fat PDFs, full WhatsApp media, and archival quote packs go to **Supabase Storage** (primary blobs). Put the object path in the pack and on `media_index.supabase_object_path`. Mint signed URLs at read time — do not store them.
-4. Google Drive is for **human folder purpose** (`drive_folders`), not the bulk dump. Optionally link a warm pack via `drive_folders.contextpack_path`.
-5. Postgres holds the **hot** index only (`media_index`), never blobs.
+3. Fat PDFs, full WhatsApp media, and archival quote packs go to **Supabase Storage** as versioned file objects (the version store). Retrieve/replace them as the artifact evolves; put the object path in the pack and on `media_index.supabase_object_path`. Mint signed URLs at read time -- do not store them.
+4. Google Drive is for **contextual/organized files** and folder purpose/placement context (`drive_folders`), not the version store. Link an artifact with `media_index.drive_folder_id` when applicable.
+5. Postgres holds the **hot** index only (`media_index`): it links the Supabase version object and optional Google Drive context, never blobs.
 
 ## Layout
 

@@ -2,8 +2,8 @@
  * Hot / warm / blob / Drive-folder storage contract.
  * HOT = Postgres index only (no blobs, no long-lived signed URLs).
  * WARM = git contextpacks/.
- * BLOBS = Supabase Storage (primary cold/warm objects); mint signed URLs at read time.
- * Drive = folder purpose index only (not the main dump).
+ * BLOBS = Supabase Storage version store for versioned file objects; retrieve/replace as needed and mint signed URLs at read time.
+ * Drive = contextual/organized files plus folder purpose/placement context; index links drive_folder_id to drive_folders.
  */
 
 export type StorageTier = "hot" | "warm" | "blob" | "drive_folder";
@@ -41,9 +41,9 @@ export type MediaIndexRow = {
   staff_id: string | null;
   task_id: string | null;
   warm_pack_path: string | null;
-  /** Supabase Storage object path (bucket/key). Not a signed URL. */
+  /** Supabase Storage version-store object path (bucket/key). Not a signed URL. */
   supabase_object_path: string | null;
-  /** Optional association with a human Drive folder (not blob location). */
+  /** Optional link to contextual/organized Google Drive placement (not the version-store location). */
   drive_folder_id: string | null;
   slack_file_ref: string | null;
   mime_hint: string | null;

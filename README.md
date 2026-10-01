@@ -79,14 +79,14 @@ A thrown post marks the row `failed`. `publishPending` does not pick up a `faile
 
 ## Storage tiers
 
-Media and archives are split across hot index, warm git packs, Supabase Storage blobs, and a Drive folder-purpose index. Postgres stays an index.
+Media and archives are split across the hot Postgres index, warm git packs, versioned Supabase Storage objects, and contextual/organized Google Drive files. The hot index links both stores: `supabase_object_path` for the version object and `drive_folder_id` / `drive_folders` for placement/context.
 
 | Tier | Where | Role |
 | --- | --- | --- |
-| HOT | Supabase / Postgres (`media_index`) | JIDs, timestamps, tags, staff/task links, Storage object paths, optional Drive folder links -- **no blobs**, no long-lived signed URLs |
+| HOT | Supabase / Postgres (`media_index`) | JIDs, timestamps, tags, staff/task links, `supabase_object_path`, optional `drive_folder_id` / `drive_folders` links -- **no blobs**, no long-lived signed URLs |
 | WARM | git `contextpacks/` | Short curated `.md` for agent context; prune/rollup so the repo stays lean |
-| BLOBS | **Supabase Storage** | Primary dump for WA media, PDFs, archival packs -- humans pull via signed URLs minted at read time |
-| Drive | `drive_folders` | Organized human folders: folder id + purpose/context -- **not** the main blob dump |
+| VERSION STORE | **Supabase Storage** | Versioned file objects for WA media, PDFs, and archival packs; retrieve/replace as artifacts evolve; humans pull via signed URLs minted at read time |
+| Drive | `drive_folders` | Contextual/organized Google Drive files and folder purpose/context; index links `drive_folder_id` for franbird placement/context answers -- **not** the version store |
 
 Slack is the recent human media inbox, not the long-term archive.
 

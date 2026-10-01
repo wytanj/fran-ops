@@ -1,7 +1,7 @@
 /**
  * WhatsApp → warm pack + media_index payload stubs.
- * Primary blobs target Supabase Storage (upload stub TODO).
- * Does NOT upload to Drive as the dump. Optional Drive folder purpose link is separate.
+ * Versioned file objects target Supabase Storage (upload stub TODO); retrieve/replace as artifacts evolve.
+ * Does NOT use Drive as the version store or bulk dump; optional Drive folder context is separate.
  */
 
 import {
@@ -30,7 +30,7 @@ function slugFromMessage(chatJid: string, messageId: string): string {
  * TODO: upload local media to Supabase Storage and set a real supabase_object_path
  *       (needs SUPABASE_URL + service role + bucket/policy from JT).
  * TODO: optional post of a recent copy to an allowlisted Slack channel (needs #1 Slack install).
- * Do not upload to Drive as the primary blob store.
+ * Do not use Drive as the version store; use it for contextual/organized placement.
  */
 export function ingestWaMedia(ref: WaMediaRef): WaIngestResult {
   assertNoBlobPayload(ref as unknown as Record<string, unknown>);
@@ -143,8 +143,8 @@ export async function writeWarmPack(
 }
 
 /**
- * TODO: upload bytes to Supabase Storage and return the durable object path.
- * Needs SUPABASE_URL + service role. Do not use Drive as the primary dump.
+ * TODO: upload/replace bytes in Supabase Storage and return the durable version-store object path.
+ * Needs SUPABASE_URL + service role. Do not use Drive as the version store; use it for contextual/organized placement.
  */
 export async function uploadToSupabaseStorage(_opts: {
   localPath: string;

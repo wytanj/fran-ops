@@ -1,14 +1,14 @@
 -- fran-ops storage index. Hot tier only: JIDs, timestamps, tags, staff/task links, pointers.
 -- No bytea / blob columns. Warm packs live in git contextpacks/.
--- Blobs live in Supabase Storage (primary cold/warm object store). Index stores object paths only;
+-- Supabase Storage is the version store for versioned file objects; retrieve/replace as artifacts evolve. Index stores object paths only;
 -- signed URLs are minted at read time and must NOT be persisted (they expire).
--- Drive rows (drive_folders) are folder purpose / context only — NOT the bulk blob dump.
+-- Drive rows (drive_folders) capture contextual/organized folder placement and purpose/context -- not the version store.
 -- Does not rewrite 001_bus.sql.
 
 begin;
 
--- Human Drive folders: purpose index so franbird can answer "what was this folder for?"
--- Do not use Drive as the primary blob store; blobs go to Supabase Storage.
+-- Human Drive folders: contextual/organized placement and purpose index so franbird can answer placement/context questions.
+-- Do not use Drive as the version store; versioned file objects go to Supabase Storage.
 create table drive_folders (
   folder_id text primary key check (length(btrim(folder_id)) > 0),
   name text not null check (length(btrim(name)) > 0),
@@ -34,7 +34,7 @@ create index drive_folders_parent_folder_id_idx on drive_folders (parent_folder_
 create index drive_folders_tags_gin_idx on drive_folders using gin (tags);
 
 comment on table drive_folders is
-  'Google Drive folder purpose index only. Blobs live in Supabase Storage, not Drive.';
+  'Google Drive contextual/organized folder placement and purpose index. Versioned file objects live in Supabase Storage.';
 comment on column drive_folders.purpose is
   'Human-readable what this folder is for (franbird context).';
 comment on column drive_folders.contextpack_path is
@@ -63,7 +63,7 @@ create table media_index (
       and warm_pack_path like 'contextpacks/%'
     )
   ),
-  -- Primary blob pointer: Supabase Storage object path (bucket + path). No long-lived signed URL.
+  -- Version-store pointer: Supabase Storage object path (bucket + path). Retrieve/replace the object as needed; no long-lived signed URL.
   supabase_object_path text check (
     supabase_object_path is null
     or (
@@ -72,7 +72,7 @@ create table media_index (
       and position('..' in supabase_object_path) = 0
     )
   ),
-  -- Optional association with a human Drive folder (NOT the blob location).
+  -- Optional link to contextual/organized Google Drive placement (NOT the version-store location).
   drive_folder_id text references drive_folders (folder_id),
   slack_file_ref text check (
     slack_file_ref is null
@@ -99,11 +99,11 @@ create table media_index (
 );
 
 comment on table media_index is
-  'Hot index only. Blobs live in Supabase Storage; signed URLs minted at read time from supabase_object_path.';
+  'Hot index only. Links Supabase version-store objects and optional Google Drive context; signed URLs minted at read time from supabase_object_path.';
 comment on column media_index.supabase_object_path is
-  'Supabase Storage object path (bucket/key). Do not store signed URLs — they expire.';
+  'Supabase Storage version-store object path (bucket/key). Retrieve/replace as needed; do not store signed URLs -- they expire.';
 comment on column media_index.drive_folder_id is
-  'Optional link to a human Drive folder purpose row; not the blob store location.';
+  'Optional link to a contextual/organized Google Drive folder purpose row for placement/context; not the version-store location.';
 
 create index media_index_occurred_at_idx on media_index (occurred_at);
 create index media_index_tags_gin_idx on media_index using gin (tags);
