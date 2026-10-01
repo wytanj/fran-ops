@@ -1,7 +1,7 @@
 import { App, ExpressReceiver, LogLevel } from "@slack/bolt";
-import { CHANNEL_ALLOWLIST, type ChannelGrant } from "./allowlist.ts";
+import { loadChannelAllowlist, type ChannelGrant } from "./allowlist.ts";
 import { pgDb, type Db } from "./db.ts";
-import { resolvedTellCard } from "./cards.ts";
+import { extractCardBodyFromMessage, resolvedTellCard } from "./cards.ts";
 import { handleAppMention, handleCardAction, handleChannelMessage, handleFranCommand, handleReaction } from "./handlers.ts";
 import { publishPending, type SlackPoster } from "./publish.ts";
 
@@ -76,7 +76,7 @@ export function createSlackApp(opts: {
   botUserId?: string;
   verifyToken?: boolean;
 }): App {
-  const grants = opts.grants ?? CHANNEL_ALLOWLIST;
+  const grants = opts.grants ?? loadChannelAllowlist();
   const receiver = new ExpressReceiver({
     signingSecret: opts.signingSecret,
     endpoints: "/slack/events",
@@ -139,11 +139,11 @@ export function createSlackApp(opts: {
       return;
     }
     const decision = parsed.actionId === "card.approve" ? "approve" : "send_back";
-    const priorText =
-      isRecord(body) && isRecord(body.message) && typeof body.message.text === "string"
-        ? body.message.text
+    const priorBody =
+      isRecord(body) && "message" in body
+        ? extractCardBodyFromMessage(body.message)
         : "Franbird tell";
-    const card = resolvedTellCard({ body: priorText, decision });
+    const card = resolvedTellCard({ body: priorBody, decision });
     await respond({
       replace_original: true,
       text: card.text,
@@ -180,7 +180,8 @@ export async function startFromEnv(env: NodeJS.ProcessEnv = process.env): Promis
   const port = Number(env.PORT ?? "3000");
   if (!Number.isInteger(port) || port <= 0) throw new Error("PORT must be a positive integer");
   const db = pgDb(databaseUrl);
-  const app = createSlackApp({ db, botToken, signingSecret, verifyToken: true });
+  const grants = loadChannelAllowlist(env);
+  const app = createSlackApp({ db, botToken, signingSecret, grants, verifyToken: true });
   const poster = webPoster(app.client);
   const timer = setInterval(() => {
     void publishPending(db, poster).catch((error: unknown) => {

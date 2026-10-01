@@ -112,7 +112,7 @@ test("free text and unknown templates do not create tasks", async () => {
     channelId: slackChannel,
     triggerId: "trig-unknown",
   });
-  expect(free.reply).toBe("Templates do not take free text.");
+  expect(free.reply).toContain("Templates do not take free text.");
   expect(unknown.reply).toContain("shift_open");
   expect(await count(db, "tasks")).toBe(0);
 });

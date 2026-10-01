@@ -169,7 +169,8 @@ export function parseFranbirdTell(text: string): Result<{
   if (verb === null) return { ok: false, reason: "bad_franbird" };
   t = t.slice(verb[0].length).trim();
 
-  const assigneeMatch = t.match(/^<@(U[A-Z0-9]+)(?:\|[^>]+)?>\s*/);
+  const assigneeMatch =
+    t.match(/^<@(U[A-Z0-9]+)(?:\|[^>]+)?>\s*/) ?? t.match(/^(U[A-Z0-9]{2,})\s+/);
   if (assigneeMatch === null || assigneeMatch[1] === undefined) {
     return { ok: false, reason: "bad_franbird" };
   }
@@ -189,6 +190,17 @@ export function parseFranbirdTell(text: string): Result<{
   const body = t.trim();
   if (body.length === 0) return { ok: false, reason: "bad_franbird" };
   return { ok: true, value: { assigneeSlackUserId, body, briefing } };
+}
+
+
+export function birdCommandHelp(): string {
+  const templates = TASK_TEMPLATE_KEYS.filter((k) => k !== "tell").join(", ");
+  return [
+    "Franbird — /bird",
+    `Templates: ${templates}`,
+    "Tell: tell <@user> <message> [briefing=optional|required]",
+    "Also: ask/please/can you…; bare U… ids ok in /bird; /bird help",
+  ].join("\n");
 }
 
 export function stampForReaction(emoji: string): StampKind | null {

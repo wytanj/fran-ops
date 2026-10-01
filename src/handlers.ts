@@ -2,6 +2,7 @@ import { findGrant, type ChannelGrant } from "./allowlist.ts";
 import { applyStamp, findStaffBySurface, ingestChannelMessage, openFranbirdTell, openTask, recordCardDecision } from "./bus.ts";
 import type { Db } from "./db.ts";
 import {
+  birdCommandHelp,
   parseFranbirdTell,
   parseFranText,
   parseSlackChannelId,
@@ -52,6 +53,10 @@ export async function handleFranCommand(
   grants: readonly ChannelGrant[],
   input: { text: string; slackUserId: string; channelId: string; triggerId: string },
 ): Promise<{ reply: string }> {
+  const trimmed = input.text.trim();
+  if (trimmed.length === 0 || /^(help|\?|commands)$/i.test(trimmed)) {
+    return { reply: birdCommandHelp() };
+  }
   const channelId = parseSlackChannelId(input.channelId);
   const slackUserId = parseSlackUserId(input.slackUserId);
   if (channelId === null || slackUserId === null || input.triggerId.trim() === "") {
@@ -63,7 +68,7 @@ export async function handleFranCommand(
   const staff = await findStaffBySurface(db, "slack", slackUserId);
   if (staff === null) return { reply: replyFor("unknown_staff") };
 
-  const tell = parseFranbirdTell(input.text);
+  const tell = parseFranbirdTell(trimmed);
   if (tell.ok) {
     const assignee = await findStaffBySurface(db, "slack", tell.value.assigneeSlackUserId);
     if (assignee === null) return { reply: replyFor("unknown_assignee") };
@@ -84,8 +89,12 @@ export async function handleFranCommand(
     };
   }
 
-  const parsed = parseFranText(input.text);
-  if (!parsed.ok) return { reply: replyFor(parsed.reason) };
+  const parsed = parseFranText(trimmed);
+  if (!parsed.ok) {
+    return {
+      reply: `${replyFor(parsed.reason)}\n\n${birdCommandHelp()}`,
+    };
+  }
   const opened = await openTask(db, {
     grants,
     templateKey: parsed.value.templateKey,
