@@ -24,6 +24,9 @@ Partial unique indexes stop a second row from taking the same Slack user id or t
 
 ## Slack Bolt
 
+Ops (channel IDs + staff Slack maps): [docs/slack-ops.md](docs/slack-ops.md).
+
+
 `src/slack.ts` builds a Bolt app on the HTTP Events API. `socketMode` is false. Slack should send events, slash commands, and block actions to `/slack/events`.
 
 `message` on an allowlisted channel writes `channel.message`. The text does not open a task. `reaction_added` uses this map in `REACTION_TO_STAMP`.
@@ -38,13 +41,13 @@ Partial unique indexes stop a second row from taking the same Slack user id or t
 
 Any other reaction is ignored. The stamp applies only after the card has a `message_ref`.
 
-`/fran` accepts one of `shift_open`, `shift_close`, `incident`, or `hand_off`. A second word is rejected. Free-text New Task is rejected.
+`/bird` accepts one of `shift_open`, `shift_close`, `incident`, or `hand_off`. A second word is rejected. Free-text New Task is rejected.
 
 An `app_mention` whose text matches `tell <@U012ABC> <message> briefing=optional` or `briefing=required` opens a `tell` task. The actor and the assignee must both be rows in `staff_identities`. `briefing=required` sets `tasks.briefing_required`. The bus enqueues a channel ack, an assignee DM ack, and a `draft_for_approve` card. `publishPending` posts those three Slack rows. A failed mention is the only case that replies in the thread. A successful mention does not post a second ack.
 
 `card.approve` writes `card.approved`. `card.send_back` writes `card.sent_back`.
 
-`CHANNEL_ALLOWLIST` in `src/allowlist.ts` ships empty. Add a channel in that file. A channel that exists only in `channel_allowlist` does not admit a new event.
+`CHANNEL_ALLOWLIST` in `src/allowlist.ts` holds permanent grants (includes `all-fran`). Extra channels: set `SLACK_EXTRA_CHANNELS` (see `docs/slack-ops.md`) or edit the code list. A channel that exists only in the DB table does not admit a new event.
 
 ## Env vars JT must set
 
@@ -54,6 +57,7 @@ An `app_mention` whose text matches `tell <@U012ABC> <message> briefing=optional
 | `SLACK_SIGNING_SECRET` | yes | Request signature verification |
 | `DATABASE_URL` | yes | Postgres connection string for the bus |
 | `PORT` | no | HTTP listen port, default 3000 |
+| `SLACK_EXTRA_CHANNELS` | no | Extra allowlisted Slack channels (`C…:name,…`); see `docs/slack-ops.md` |
 
 `bun start` reads those. The process calls `publishPending` every 5 seconds and posts pending Slack rows.
 

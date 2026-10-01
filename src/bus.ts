@@ -43,8 +43,15 @@ export type StaffIdentity = {
   telegramUserId: string | null;
 };
 
+function normalizeDisplayName(raw: string | null | undefined): string | null {
+  if (raw === undefined || raw === null) return null;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/** Full snapshot upsert (tests / bootstrap). Pass null surface ids to clear them. */
 export async function linkStaff(db: Db, input: StaffLink): Promise<void> {
-  const displayName = input.displayName?.trim() ? input.displayName.trim() : null;
+  const displayName = normalizeDisplayName(input.displayName);
   await db.query(
     `insert into staff_identities (staff_id, employment, slack_user_id, telegram_user_id, display_name)
      values ($1, $2, $3, $4, $5)
@@ -56,6 +63,49 @@ export async function linkStaff(db: Db, input: StaffLink): Promise<void> {
        updated_at = now()`,
     [input.staffId, input.employment, input.slackUserId, input.telegramUserId, displayName],
   );
+}
+
+/**
+ * Ops helper: link/update Slack user on a staff row without wiping telegram_user_id.
+ * On insert, telegram stays null until set separately. Display name coalesces on update.
+ */
+export async function linkSlackUser(
+  db: Db,
+  input: {
+    staffId: StaffId;
+    employment: Employment;
+    slackUserId: SlackUserId;
+    displayName?: string | null;
+  },
+): Promise<void> {
+  const displayName = normalizeDisplayName(input.displayName);
+  await db.query(
+    `insert into staff_identities (staff_id, employment, slack_user_id, telegram_user_id, display_name)
+     values ($1, $2, $3, null, $4)
+     on conflict (staff_id) do update set
+       employment = excluded.employment,
+       slack_user_id = excluded.slack_user_id,
+       display_name = coalesce(excluded.display_name, staff_identities.display_name),
+       updated_at = now()`,
+    [input.staffId, input.employment, input.slackUserId, displayName],
+  );
+}
+
+/** Set or clear display_name. Returns false when staff_id is missing. */
+export async function setStaffDisplayName(
+  db: Db,
+  staffId: StaffId,
+  displayName: string | null,
+): Promise<boolean> {
+  const normalized = normalizeDisplayName(displayName);
+  const rows = await db.query<{ staff_id: string }>(
+    `update staff_identities
+     set display_name = $2, updated_at = now()
+     where staff_id = $1
+     returning staff_id`,
+    [staffId, normalized],
+  );
+  return rows.length > 0;
 }
 
 function mapStaffRow(row: {
@@ -113,6 +163,21 @@ export async function findStaffById(db: Db, staffId: StaffId): Promise<StaffIden
   const row = rows[0];
   if (row === undefined) return null;
   return mapStaffRow(row);
+}
+
+export async function listStaffIdentities(db: Db): Promise<StaffIdentity[]> {
+  const rows = await db.query<{
+    staff_id: string;
+    employment: string;
+    display_name: string | null;
+    slack_user_id: string | null;
+    telegram_user_id: string | null;
+  }>(
+    `select staff_id, employment, display_name, slack_user_id, telegram_user_id
+     from staff_identities
+     order by coalesce(display_name, slack_user_id, staff_id::text)`,
+  );
+  return rows.map(mapStaffRow);
 }
 
 function labelFor(identity: StaffIdentity | null, staffId: StaffId): string {
