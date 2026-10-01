@@ -1,0 +1,17 @@
+# Alternate path: Docker Compose instead of systemd+bun on the host.
+# Primary deploy for this bus is systemd + bun (always-on outbox poll).
+# Use this only if you prefer containers; Caddy can still sit on the host
+# proxying to published PORT, or add a caddy service yourself.
+
+services:
+  fran-ops:
+    image: oven/bun:1
+    working_dir: /app
+    volumes:
+      - ../..:/app
+    env_file:
+      - /etc/fran-ops.env
+    command: ["bun", "start"]
+    ports:
+      - "127.0.0.1:3000:3000"
+    restart: unless-stopped

@@ -1,0 +1,27 @@
+[Unit]
+Description=fran-ops Slack bus (Bun)
+Documentation=https://github.com/wytanj/fran-ops
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=franops
+Group=franops
+WorkingDirectory=/opt/fran-ops
+EnvironmentFile=/etc/fran-ops.env
+ExecStart=/usr/local/bin/bun start
+Restart=always
+RestartSec=5
+# Hardening (safe defaults for a Node/Bun HTTP service)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/fran-ops
+# Outbox poll + HTTP Events API — keep the process alive
+KillMode=mixed
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

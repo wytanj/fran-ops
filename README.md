@@ -73,6 +73,15 @@ A thrown post marks the row `failed`. `publishPending` does not pick up a `faile
 - Do not open a task from free text.
 - Do not apply `migrations/001_bus.sql` to a shared database from a kicked session. That apply is class D. The outer loop runs it only after JT says yes in his own words.
 
+## Deploy (Hetzner VPS)
+
+Always-on bus on a Hetzner CX22 / Ubuntu 24.04 with Caddy TLS + systemd + Bun.
+
+- Scaffold + install notes: [deploy/vps/README.md](deploy/vps/README.md)
+- JT bootstrap checklist: [docs/deploy-hetzner.md](docs/deploy-hetzner.md)
+
+Domain placeholder: ops.heyfran.com → Slack Events at /slack/events. Scaffold only; Class C merge of Slack #1 is still after JT install.
+
 ## Next
 
 `contextpacks/NEXT.md` names the slices that come after this one.

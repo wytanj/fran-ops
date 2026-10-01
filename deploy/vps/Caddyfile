@@ -1,0 +1,13 @@
+# fran-ops — Caddy reverse proxy (preferred TLS via ACME)
+# Domain: ops.heyfran.com → Slack Events hit /slack/events
+#
+# Install: copy to /etc/caddy/Caddyfile (or include from there), then:
+#   sudo systemctl reload caddy
+#
+# Requires DNS A record ops.heyfran.com → this server's public IP.
+# Caddy obtains/renews Let's Encrypt certs automatically.
+
+ops.heyfran.com {
+	encode gzip
+	reverse_proxy localhost:3000
+}
