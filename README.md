@@ -76,3 +76,21 @@ A thrown post marks the row `failed`. `publishPending` does not pick up a `faile
 ## Next
 
 `contextpacks/NEXT.md` names the slices that come after this one.
+
+## Storage tiers
+
+Media and archives are split across three tiers. Postgres stays an index.
+
+| Tier | Where | Role |
+| --- | --- | --- |
+| HOT | Supabase / Postgres (`media_index`) | JIDs, timestamps, tags, staff/task links, pointers only -- **no blobs** |
+| WARM | git `contextpacks/` | Short curated `.md` for agent context; prune/rollup so the repo stays lean |
+| COLD | Google Drive (or object bucket) | Fat PDFs, full WA media, archival packs -- agents open by link from the index |
+
+Slack is the recent human media inbox, not the long-term archive.
+
+- ADR: `docs/adr/0003-storage-tiering.md`
+- Ops guide: `docs/storage-tiers.md`
+- Migration (do not apply without JT yes): `migrations/002_storage_index.sql`
+- Types/helpers: `src/storage.ts`
+- WhatsApp stubs: `src/wacli/`
