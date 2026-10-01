@@ -522,7 +522,14 @@ export async function recordCardDecision(
       ],
     );
     const freshId = inserted[0]?.id;
-    if (freshId !== undefined) return { ok: true, value: { eventId: freshId, eventType, created: true } };
+    if (freshId !== undefined) {
+      const nextStatus = input.decision === "approve" ? "done" : "blocked";
+      await query(`update tasks set status = $2, updated_at = now() where id = $1`, [
+        input.taskId,
+        nextStatus,
+      ]);
+      return { ok: true, value: { eventId: freshId, eventType, created: true } };
+    }
     const existing = await query<{ id: string; event_type: string }>(
       `select id, event_type from events where idempotency_key = $1`,
       [input.idempotencyKey],

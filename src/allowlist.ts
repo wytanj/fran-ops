@@ -6,7 +6,9 @@ export type ChannelGrant = {
   name: string;
 };
 
-export const CHANNEL_ALLOWLIST: readonly ChannelGrant[] = [];
+export const CHANNEL_ALLOWLIST: readonly ChannelGrant[] = [
+  { surface: "slack", channelId: "C0C5GDWHBNX", name: "all-fran" },
+];
 
 export function findGrant(
   grants: readonly ChannelGrant[],
