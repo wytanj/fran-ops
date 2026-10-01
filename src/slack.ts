@@ -1,6 +1,7 @@
 import { App, ExpressReceiver, LogLevel } from "@slack/bolt";
 import { CHANNEL_ALLOWLIST, type ChannelGrant } from "./allowlist.ts";
 import { pgDb, type Db } from "./db.ts";
+import { resolvedTellCard } from "./cards.ts";
 import { handleAppMention, handleCardAction, handleChannelMessage, handleFranCommand, handleReaction } from "./handlers.ts";
 import { publishPending, type SlackPoster } from "./publish.ts";
 
@@ -118,7 +119,7 @@ export function createSlackApp(opts: {
     await handleReaction(opts.db, grants, parsed);
   });
 
-  app.command("/fran", async ({ command, ack }) => {
+  app.command("/bird", async ({ command, ack }) => {
     const result = await handleFranCommand(opts.db, grants, {
       text: command.text,
       slackUserId: command.user_id,
@@ -128,11 +129,26 @@ export function createSlackApp(opts: {
     await ack({ response_type: "ephemeral", text: result.reply });
   });
 
-  app.action(/^card\./, async ({ action, body, ack }) => {
+  app.action(/^card\./, async ({ action, body, ack, respond }) => {
     const parsed = parseSlackCardAction(action, body);
     await ack();
     if (parsed === null) return;
-    await handleCardAction(opts.db, parsed);
+    const result = await handleCardAction(opts.db, parsed);
+    if (!result.recorded) {
+      await respond({ response_type: "ephemeral", text: "Could not record that decision (not linked or bad payload)." });
+      return;
+    }
+    const decision = parsed.actionId === "card.approve" ? "approve" : "send_back";
+    const priorText =
+      isRecord(body) && isRecord(body.message) && typeof body.message.text === "string"
+        ? body.message.text
+        : "Franbird tell";
+    const card = resolvedTellCard({ body: priorText, decision });
+    await respond({
+      replace_original: true,
+      text: card.text,
+      blocks: card.blocks,
+    });
   });
 
   return app;
