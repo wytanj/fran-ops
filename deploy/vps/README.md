@@ -6,7 +6,9 @@ Deploy scaffold for an always-on fran-ops bus on a DigitalOcean droplet in **`sg
 **Suggested size:** DigitalOcean Basic shared CPU **`s-1vcpu-2gb`** or a similar modest droplet.
 **Alternate:** `docker-compose.yml` in this folder (optional; not the default for the outbox poller).
 
-Domain placeholder: **`ops.heyfran.com`**
+**Current fran-ops host placeholder:** `167.99.68.48` (DigitalOcean Singapore). DNS A `ops.heyfran.com` -> `167.99.68.48`. Keep bootstrap held until DNS and SSH access are confirmed.
+
+**Hosting split:** Vercel is for frontends and short-lived HTTP. This droplet is for always-on `fran-ops`, `franbird`, workers, and `wacli`; do not default everything to Vercel.
 
 > Class C merge of Slack #1 still happens after JT install. This folder is **deploy scaffold only**.
 > Do not apply migrations or touch live Slack from an automated session without JT yes in his own words.
@@ -28,7 +30,7 @@ Slack Events, slash commands, and block actions hit **`/slack/events`** on the B
 ## Quick path (JT)
 
 1. Create a DigitalOcean **Droplet** in **Singapore (`sgp1`)**, using **Ubuntu 24.04**, a Basic shared CPU size such as **`s-1vcpu-2gb`** (or similar modest size), and attach your SSH key.
-2. DNS: A record `ops.heyfran.com` -> droplet public IPv4 (wait for propagation).
+2. DNS: A record `ops.heyfran.com` -> `167.99.68.48` (wait for propagation).
 3. SSH in, install Bun, clone fran-ops to `/opt/fran-ops`, `bun install`.
 4. Install Caddy (see below), open ufw (22/80/443), copy env, run `install.sh`.
 5. Fill `/etc/fran-ops.env`, `systemctl start fran-ops`, verify HTTPS, set Slack Event Subscriptions URL.

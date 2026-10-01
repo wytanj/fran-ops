@@ -4,6 +4,10 @@ Step-by-step for a **DigitalOcean Basic shared CPU droplet in `sgp1` (Singapore)
 Canonical files live under [`deploy/vps/`](../deploy/vps/README.md). This page is the narrative checklist.
 
 **Domain:** `ops.heyfran.com`
+
+**Current fran-ops host placeholder:** `167.99.68.48` (DigitalOcean Singapore). DNS A `ops.heyfran.com` -> `167.99.68.48`. Keep bootstrap held until DNS and SSH access are confirmed.
+
+**Hosting split:** Vercel is for frontends and short-lived HTTP. This droplet is for always-on `fran-ops`, `franbird`, workers, and `wacli`; do not default everything to Vercel.
 **App path on server:** `/opt/fran-ops`
 **TLS:** Caddy (ACME) -> `localhost:3000`
 **Process:** systemd `fran-ops.service` -> `bun start`
@@ -26,7 +30,7 @@ Create an **A record**:
 
 | Name | Type | Value |
 | --- | --- | --- |
-| `ops.heyfran.com` | A | `<droplet public IPv4>` |
+| `ops.heyfran.com` | A | `167.99.68.48` |
 
 Wait until `dig +short ops.heyfran.com` returns the droplet IP before relying on TLS.
 
