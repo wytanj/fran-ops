@@ -74,8 +74,8 @@ systemctl enable fran-ops.service
 
 if command -v caddy >/dev/null 2>&1; then
   echo "==> Installing Caddyfile → ${CADDY_DST}"
-  if [[ -f "${CADDY_DST}" ]] && ! grep -q "ops.heyfran.com" "${CADDY_DST}" 2>/dev/null; then
-    echo "    Existing ${CADDY_DST} has no ops.heyfran.com block."
+  if [[ -f "${CADDY_DST}" ]] && ! grep -q "ops.heyfran.co" "${CADDY_DST}" 2>/dev/null; then
+    echo "    Existing ${CADDY_DST} has no ops.heyfran.co block."
     echo "    Backing up to ${CADDY_DST}.bak and replacing with fran-ops Caddyfile."
     cp -a "${CADDY_DST}" "${CADDY_DST}.bak"
   fi
@@ -89,12 +89,12 @@ fi
 echo ""
 echo "Done. Next (manual):"
 echo "  1. Edit secrets:  sudoedit ${ENV_FILE}"
-echo "  2. DNS A record:  ops.heyfran.com → this server public IP"
+echo "  2. DNS A record:  ops.heyfran.co → this server public IP"
 echo "  3. ufw:           allow 22/80/443 (see deploy/vps/README.md)"
 echo "  4. Deps:          cd ${APP_DIR} && sudo -u ${APP_USER} bun install"
 echo "  5. Start:         sudo systemctl start fran-ops"
-echo "  6. Verify:        curl -sI https://ops.heyfran.com/slack/events"
-echo "  7. Slack Event URL → https://ops.heyfran.com/slack/events"
+echo "  6. Verify:        curl -sI https://ops.heyfran.co/slack/events"
+echo "  7. Slack Event URL → https://ops.heyfran.co/slack/events"
 echo ""
 echo "Note: Class C merge of Slack #1 is still after JT install; this is deploy scaffold only."
 echo "Do not apply DB migrations or change live Slack from an automated session without JT yes."

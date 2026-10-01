@@ -3,9 +3,11 @@
 Step-by-step for a **DigitalOcean Basic shared CPU droplet in `sgp1` (Singapore)**, using **`s-1vcpu-2gb`** or a similar modest size and **Ubuntu 24.04**.
 Canonical files live under [`deploy/vps/`](../deploy/vps/README.md). This page is the narrative checklist.
 
-**Domain:** `ops.heyfran.com`
+**Domain:** `ops.heyfran.co`
 
-**Current fran-ops host placeholder:** `167.99.68.48` (DigitalOcean Singapore). DNS A `ops.heyfran.com` -> `167.99.68.48`. Keep bootstrap held until DNS and SSH access are confirmed.
+The former .com host had NS issues; ops.heyfran.co is now the canonical host.
+
+**Current fran-ops host placeholder:** `167.99.68.48` (DigitalOcean Singapore). DNS A `ops.heyfran.co` -> `167.99.68.48`. Keep bootstrap held until DNS and SSH access are confirmed.
 
 **Hosting split:** Vercel is for frontends and short-lived HTTP. This droplet is for always-on `fran-ops`, `franbird`, workers, and `wacli`; do not default everything to Vercel.
 **App path on server:** `/opt/fran-ops`
@@ -30,9 +32,9 @@ Create an **A record**:
 
 | Name | Type | Value |
 | --- | --- | --- |
-| `ops.heyfran.com` | A | `167.99.68.48` |
+| `ops.heyfran.co` | A | `167.99.68.48` |
 
-Wait until `dig +short ops.heyfran.com` returns the droplet IP before relying on TLS.
+Wait until `dig +short ops.heyfran.co` returns the droplet IP before relying on TLS.
 
 ## 3. First SSH + baseline packages
 
@@ -99,7 +101,7 @@ nano /etc/fran-ops.env
 ```bash
 systemctl start fran-ops
 systemctl status fran-ops caddy
-curl -sI https://ops.heyfran.com/slack/events
+curl -sI https://ops.heyfran.co/slack/events
 journalctl -u fran-ops -n 50 --no-pager
 ```
 
@@ -110,7 +112,7 @@ Expect Caddy to serve HTTPS and proxy to the Bun process. A 502 means fran-ops i
 Point Event Subscriptions (and Interactivity / slash command request URLs if separate) at:
 
 ```text
-https://ops.heyfran.com/slack/events
+https://ops.heyfran.co/slack/events
 ```
 
 Complete Slack's URL verification with the same signing secret as `/etc/fran-ops.env`.

@@ -81,7 +81,7 @@ Always-on bus on a DigitalOcean droplet in `sgp1` (Singapore), Ubuntu 24.04, wit
 - JT bootstrap checklist: [docs/deploy-digitalocean-sg.md](docs/deploy-digitalocean-sg.md)
 - Alternate note: Fly.io region `sin` may be evaluated later; keep Caddy + Bun + systemd on the DigitalOcean droplet as the primary path.
 
-Domain placeholder: ops.heyfran.com -> Slack Events at /slack/events. Scaffold only; Class C merge of Slack #1 is still after JT install.
+Canonical host: ops.heyfran.co -> Slack Events at /slack/events. The former .com host had NS issues. Scaffold only; Class C merge of Slack #1 is still after JT install.
 
 ## Next
 

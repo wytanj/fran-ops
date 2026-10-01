@@ -6,7 +6,9 @@ Deploy scaffold for an always-on fran-ops bus on a DigitalOcean droplet in **`sg
 **Suggested size:** DigitalOcean Basic shared CPU **`s-1vcpu-2gb`** or a similar modest droplet.
 **Alternate:** `docker-compose.yml` in this folder (optional; not the default for the outbox poller).
 
-**Current fran-ops host placeholder:** `167.99.68.48` (DigitalOcean Singapore). DNS A `ops.heyfran.com` -> `167.99.68.48`. Keep bootstrap held until DNS and SSH access are confirmed.
+**Current fran-ops host placeholder:** `167.99.68.48` (DigitalOcean Singapore). DNS A `ops.heyfran.co` -> `167.99.68.48`. Keep bootstrap held until DNS and SSH access are confirmed.
+
+**Canonical host:** ops.heyfran.co. The former .com host had NS issues; use .co for DNS, TLS, and Slack URLs.
 
 **Hosting split:** Vercel is for frontends and short-lived HTTP. This droplet is for always-on `fran-ops`, `franbird`, workers, and `wacli`; do not default everything to Vercel.
 
@@ -19,7 +21,7 @@ Longer walkthrough: [`docs/deploy-digitalocean-sg.md`](../../docs/deploy-digital
 
 | File | Role |
 | --- | --- |
-| `Caddyfile` | TLS + reverse proxy `ops.heyfran.com` -> `localhost:3000` |
+| `Caddyfile` | TLS + reverse proxy `ops.heyfran.co` -> `localhost:3000` |
 | `fran-ops.service` | systemd unit: `bun start`, `EnvironmentFile=/etc/fran-ops.env`, `Restart=always`, user `franops` |
 | `fran-ops.env.example` | Env template (copy to `/etc/fran-ops.env`; never commit secrets) |
 | `install.sh` | Idempotent-ish installer for unit + Caddyfile + user + env template |
@@ -30,7 +32,7 @@ Slack Events, slash commands, and block actions hit **`/slack/events`** on the B
 ## Quick path (JT)
 
 1. Create a DigitalOcean **Droplet** in **Singapore (`sgp1`)**, using **Ubuntu 24.04**, a Basic shared CPU size such as **`s-1vcpu-2gb`** (or similar modest size), and attach your SSH key.
-2. DNS: A record `ops.heyfran.com` -> `167.99.68.48` (wait for propagation).
+2. DNS: A record `ops.heyfran.co` -> `167.99.68.48` (wait for propagation).
 3. SSH in, install Bun, clone fran-ops to `/opt/fran-ops`, `bun install`.
 4. Install Caddy (see below), open ufw (22/80/443), copy env, run `install.sh`.
 5. Fill `/etc/fran-ops.env`, `systemctl start fran-ops`, verify HTTPS, set Slack Event Subscriptions URL.
@@ -73,11 +75,11 @@ sudo systemctl enable --now caddy
 sudo systemctl reload caddy
 ```
 
-Caddy obtains Let's Encrypt certs for `ops.heyfran.com` once DNS points here and ports 80/443 are open.
+Caddy obtains Let's Encrypt certs for `ops.heyfran.co` once DNS points here and ports 80/443 are open.
 
 ### nginx alternative (docs only - not shipped as default)
 
-If you prefer nginx + certbot instead of Caddy, terminate TLS on 443 and `proxy_pass http://127.0.0.1:3000;` for `ops.heyfran.com`, including `/slack/events`. Prefer Caddy for simpler ACME on this bus.
+If you prefer nginx + certbot instead of Caddy, terminate TLS on 443 and `proxy_pass http://127.0.0.1:3000;` for `ops.heyfran.co`, including `/slack/events`. Prefer Caddy for simpler ACME on this bus.
 
 ## systemd + Bun
 
@@ -109,7 +111,7 @@ Default `PORT=3000`. Optional `SLACK_APP_TOKEN` (Socket Mode). Supabase placehol
 ## Verify
 
 ```bash
-curl -sI https://ops.heyfran.com/slack/events
+curl -sI https://ops.heyfran.co/slack/events
 # Expect a response from the Bolt app (not a Caddy 502). Slack URL verification needs a live signing secret.
 
 sudo systemctl is-active fran-ops caddy
@@ -119,7 +121,7 @@ sudo systemctl is-active fran-ops caddy
 
 In the Slack app settings (Event Subscriptions / Interactivity / Slash Commands as applicable):
 
-- Request URL: `https://ops.heyfran.com/slack/events`
+- Request URL: `https://ops.heyfran.co/slack/events`
 
 Keep signing secret in `/etc/fran-ops.env` matching the Slack app. Do not paste production tokens into git.
 
