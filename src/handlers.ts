@@ -33,7 +33,7 @@ function replyFor(reason: BusReason): string {
     case "unknown_assignee":
       return "That person is not linked in staff_identities.";
     case "bad_franbird":
-      return "Use: @franbird tell <@user> <message> briefing=optional|required";
+      return "Use: tell <@user> <message> [briefing=optional|required] (also: please/ask/to, /bird tell …)";
     default: {
       const exhaustive: never = reason;
       return exhaustive;
@@ -57,13 +57,35 @@ export async function handleFranCommand(
   if (channelId === null || slackUserId === null || input.triggerId.trim() === "") {
     return { reply: replyFor("bad_payload") };
   }
-  const parsed = parseFranText(input.text);
-  if (!parsed.ok) return { reply: replyFor(parsed.reason) };
   if (findGrant(grants, "slack", channelId) === null) {
     return { reply: replyFor("channel_not_allowlisted") };
   }
   const staff = await findStaffBySurface(db, "slack", slackUserId);
   if (staff === null) return { reply: replyFor("unknown_staff") };
+
+  const tell = parseFranbirdTell(input.text);
+  if (tell.ok) {
+    const assignee = await findStaffBySurface(db, "slack", tell.value.assigneeSlackUserId);
+    if (assignee === null) return { reply: replyFor("unknown_assignee") };
+    const openedTell = await openFranbirdTell(db, {
+      grants,
+      openerStaffId: requireStaffId(staff.staffId),
+      assigneeStaffId: requireStaffId(assignee.staffId),
+      assigneeSlackUserId: tell.value.assigneeSlackUserId,
+      surface: "slack",
+      channelId,
+      body: tell.value.body,
+      briefing: tell.value.briefing,
+      idempotencyKey: `slack:command:${input.triggerId}`,
+    });
+    if (!openedTell.ok) return { reply: replyFor(openedTell.reason) };
+    return {
+      reply: `Logged ${openedTell.value.title}. Briefing ${tell.value.briefing}.`,
+    };
+  }
+
+  const parsed = parseFranText(input.text);
+  if (!parsed.ok) return { reply: replyFor(parsed.reason) };
   const opened = await openTask(db, {
     grants,
     templateKey: parsed.value.templateKey,
@@ -158,7 +180,6 @@ export async function handleCardAction(
   });
   return { recorded: result.ok };
 }
-
 
 export async function handleAppMention(
   db: Db,

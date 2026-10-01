@@ -10,7 +10,7 @@ export function draftForApproveCard(input: {
   title: string;
   templateKey: TaskTemplateKey;
   taskId: string;
-  staffId: string;
+  staffLabel: string;
 }): SlackCard {
   return {
     text: input.title,
@@ -21,7 +21,7 @@ export function draftForApproveCard(input: {
       },
       {
         type: "section",
-        text: { type: "mrkdwn", text: `${input.templateKey}\nStaff ${input.staffId}` },
+        text: { type: "mrkdwn", text: `${input.templateKey}\nStaff ${input.staffLabel}` },
       },
       {
         type: "actions",
@@ -49,8 +49,8 @@ export function draftForApproveCard(input: {
 export function franbirdTellCard(input: {
   taskId: string;
   body: string;
-  openerStaffId: string;
-  assigneeStaffId: string;
+  openerLabel: string;
+  assigneeLabel: string;
   briefing: BriefingMode;
 }): SlackCard {
   const briefingLabel = input.briefing === "required" ? "required" : "optional";
@@ -65,7 +65,7 @@ export function franbirdTellCard(input: {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: `*To staff* \`${input.assigneeStaffId}\`\n*From* \`${input.openerStaffId}\`\n*Briefing* ${briefingLabel}\n\n${input.body}`,
+          text: `*To* ${input.assigneeLabel}\n*From* ${input.openerLabel}\n*Briefing* ${briefingLabel}\n\n${input.body}`,
         },
       },
       {

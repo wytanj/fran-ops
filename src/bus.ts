@@ -5,6 +5,7 @@ import {
   STAMP_TO_STATUS,
   TASK_STATUSES,
   TASK_TEMPLATES,
+  formatStaffLabel,
   parseStaffId,
   type ChannelId,
   type Employment,
@@ -31,36 +32,96 @@ export type StaffLink = {
   employment: Employment;
   slackUserId: SlackUserId | null;
   telegramUserId: TelegramUserId | null;
+  displayName?: string | null;
+};
+
+export type StaffIdentity = {
+  staffId: StaffId;
+  employment: string;
+  displayName: string | null;
+  slackUserId: string | null;
+  telegramUserId: string | null;
 };
 
 export async function linkStaff(db: Db, input: StaffLink): Promise<void> {
+  const displayName = input.displayName?.trim() ? input.displayName.trim() : null;
   await db.query(
-    `insert into staff_identities (staff_id, employment, slack_user_id, telegram_user_id)
-     values ($1, $2, $3, $4)
+    `insert into staff_identities (staff_id, employment, slack_user_id, telegram_user_id, display_name)
+     values ($1, $2, $3, $4, $5)
      on conflict (staff_id) do update set
        employment = excluded.employment,
        slack_user_id = excluded.slack_user_id,
        telegram_user_id = excluded.telegram_user_id,
+       display_name = coalesce(excluded.display_name, staff_identities.display_name),
        updated_at = now()`,
-    [input.staffId, input.employment, input.slackUserId, input.telegramUserId],
+    [input.staffId, input.employment, input.slackUserId, input.telegramUserId, displayName],
   );
+}
+
+function mapStaffRow(row: {
+  staff_id: string;
+  employment: string;
+  display_name: string | null;
+  slack_user_id: string | null;
+  telegram_user_id: string | null;
+}): StaffIdentity {
+  const staffId = parseStaffId(row.staff_id);
+  if (staffId === null) throw new Error("staff_id in the database is not a uuid");
+  return {
+    staffId,
+    employment: row.employment,
+    displayName: row.display_name,
+    slackUserId: row.slack_user_id,
+    telegramUserId: row.telegram_user_id,
+  };
 }
 
 export async function findStaffBySurface(
   db: Db,
   surface: Surface,
   externalUserId: string,
-): Promise<{ staffId: StaffId; employment: string } | null> {
+): Promise<StaffIdentity | null> {
   const column = SURFACE_USER_COLUMN[surface];
-  const rows = await db.query<{ staff_id: string; employment: string }>(
-    `select staff_id, employment from staff_identities where ${column} = $1`,
+  const rows = await db.query<{
+    staff_id: string;
+    employment: string;
+    display_name: string | null;
+    slack_user_id: string | null;
+    telegram_user_id: string | null;
+  }>(
+    `select staff_id, employment, display_name, slack_user_id, telegram_user_id
+     from staff_identities where ${column} = $1`,
     [externalUserId],
   );
   const row = rows[0];
   if (row === undefined) return null;
-  const staffId = parseStaffId(row.staff_id);
-  if (staffId === null) throw new Error("staff_id in the database is not a uuid");
-  return { staffId, employment: row.employment };
+  return mapStaffRow(row);
+}
+
+export async function findStaffById(db: Db, staffId: StaffId): Promise<StaffIdentity | null> {
+  const rows = await db.query<{
+    staff_id: string;
+    employment: string;
+    display_name: string | null;
+    slack_user_id: string | null;
+    telegram_user_id: string | null;
+  }>(
+    `select staff_id, employment, display_name, slack_user_id, telegram_user_id
+     from staff_identities where staff_id = $1`,
+    [staffId],
+  );
+  const row = rows[0];
+  if (row === undefined) return null;
+  return mapStaffRow(row);
+}
+
+function labelFor(identity: StaffIdentity | null, staffId: StaffId): string {
+  if (identity === null) return formatStaffLabel({ staffId });
+  return formatStaffLabel({
+    staffId: identity.staffId,
+    displayName: identity.displayName,
+    slackUserId: identity.slackUserId,
+  });
 }
 
 async function staffExists(query: Query, staffId: StaffId): Promise<boolean> {
@@ -106,7 +167,9 @@ export async function openTask(
 ): Promise<Result<OpenedTask>> {
   const grant = findGrant(input.grants, input.surface, input.channelId);
   if (grant === null) return { ok: false, reason: "channel_not_allowlisted" };
-  if (!(await staffExists(db.query, input.staffId))) return { ok: false, reason: "unknown_staff" };
+  const opener = await findStaffById(db, input.staffId);
+  if (opener === null) return { ok: false, reason: "unknown_staff" };
+  const staffLabel = labelFor(opener, input.staffId);
   const template = TASK_TEMPLATES[input.templateKey];
 
   return db.transaction(async (query) => {
@@ -162,7 +225,7 @@ export async function openTask(
       title: template.title,
       templateKey: input.templateKey,
       taskId,
-      staffId: input.staffId,
+      staffLabel,
     });
     const outbox = await query<{ id: string }>(
       `insert into outbox (event_id, destination, card_template, payload)
@@ -212,8 +275,12 @@ export async function openFranbirdTell(
 ): Promise<Result<OpenedTask & { ackOutboxId: string; dmOutboxId: string }>> {
   const grant = findGrant(input.grants, input.surface, input.channelId);
   if (grant === null) return { ok: false, reason: "channel_not_allowlisted" };
-  if (!(await staffExists(db.query, input.openerStaffId))) return { ok: false, reason: "unknown_staff" };
-  if (!(await staffExists(db.query, input.assigneeStaffId))) return { ok: false, reason: "unknown_assignee" };
+  const opener = await findStaffById(db, input.openerStaffId);
+  if (opener === null) return { ok: false, reason: "unknown_staff" };
+  const assignee = await findStaffById(db, input.assigneeStaffId);
+  if (assignee === null) return { ok: false, reason: "unknown_assignee" };
+  const openerLabel = labelFor(opener, input.openerStaffId);
+  const assigneeLabel = labelFor(assignee, input.assigneeStaffId);
   const briefingRequired = input.briefing === "required";
   const title = TASK_TEMPLATES.tell.title;
 
@@ -297,8 +364,8 @@ export async function openFranbirdTell(
     const card = franbirdTellCard({
       taskId,
       body: input.body,
-      openerStaffId: input.openerStaffId,
-      assigneeStaffId: input.assigneeStaffId,
+      openerLabel,
+      assigneeLabel,
       briefing: input.briefing,
     });
     const outbox = await query<{ id: string }>(
@@ -344,7 +411,7 @@ export async function openFranbirdTell(
 
     const dmAck = ackCard({
       taskId,
-      text: `Franbird tell from staff ${input.openerStaffId}: ${input.body} (briefing ${input.briefing})`,
+      text: `Franbird tell from ${openerLabel}: ${input.body} (briefing ${input.briefing})`,
     });
     const dm = await query<{ id: string }>(
       `insert into outbox (event_id, destination, card_template, payload)

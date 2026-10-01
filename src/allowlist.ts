@@ -1,4 +1,4 @@
-import type { ChannelId, Surface } from "./domain.ts";
+import { parseSlackChannelId, type ChannelId, type Surface } from "./domain.ts";
 
 export type ChannelGrant = {
   surface: Surface;
@@ -6,8 +6,11 @@ export type ChannelGrant = {
   name: string;
 };
 
+const ALL_FRAN = parseSlackChannelId("C0C5GDWHBNX");
+if (ALL_FRAN === null) throw new Error("bad all-fran channel id");
+
 export const CHANNEL_ALLOWLIST: readonly ChannelGrant[] = [
-  { surface: "slack", channelId: "C0C5GDWHBNX", name: "all-fran" },
+  { surface: "slack", channelId: ALL_FRAN, name: "all-fran" },
 ];
 
 export function findGrant(
