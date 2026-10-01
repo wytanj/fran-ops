@@ -137,3 +137,22 @@ test("summaries require a real allowlisted channel and a forward period", async 
   );
   expect(rows[0]?.id).toBeTruthy();
 });
+
+test("staff_identities has additive display_name column", async () => {
+  const db = await freshDb();
+  const cols = await db.query<{ column_name: string }>(
+    `select column_name from information_schema.columns
+     where table_name = 'staff_identities' and column_name = 'display_name'`,
+  );
+  expect(cols).toHaveLength(1);
+  await db.query(
+    `insert into staff_identities (staff_id, employment, display_name)
+     values ($1, 'full_time', 'Pat')`,
+    [staffA],
+  );
+  const rows = await db.query<{ display_name: string }>(
+    `select display_name from staff_identities where staff_id = $1`,
+    [staffA],
+  );
+  expect(rows[0]?.display_name).toBe("Pat");
+});

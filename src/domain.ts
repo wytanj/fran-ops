@@ -135,29 +135,62 @@ export function parseFranText(text: string): Result<{ templateKey: TaskTemplateK
   return { ok: true, value: { templateKey: key } };
 }
 
+export function formatStaffLabel(input: {
+  staffId: string;
+  displayName?: string | null;
+  slackUserId?: string | null;
+}): string {
+  const name = input.displayName?.trim();
+  if (name !== undefined && name.length > 0) return name;
+  const slack = input.slackUserId?.trim();
+  if (slack !== undefined && slack.length > 0) return `<@${slack}>`;
+  const id = input.staffId.trim().toLowerCase();
+  if (UUID_RE.test(id)) return id.slice(0, 8);
+  return id.length > 8 ? id.slice(0, 8) : id;
+}
 
 export function parseFranbirdTell(text: string): Result<{
   assigneeSlackUserId: SlackUserId;
   body: string;
   briefing: BriefingMode;
 }> {
-  let t = text.replace(/^(?:\s*<@U[A-Z0-9]+>\s*)+/g, "").trim();
-  t = t.replace(/^@?franbird\s+/i, "").trim();
-  const match = t.match(
-    /^tell\s+<@(U[A-Z0-9]+)(?:\|[^>]+)?>\s+(.+?)(?:\s+briefing[=:\s]+(optional|required))?\s*$/is,
-  );
-  if (match === null) return { ok: false, reason: "bad_franbird" };
-  const assigneeRaw = match[1];
-  const bodyRaw = match[2];
-  const briefingRaw = match[3];
-  if (assigneeRaw === undefined || bodyRaw === undefined) return { ok: false, reason: "bad_franbird" };
-  const assigneeSlackUserId = parseSlackUserId(assigneeRaw);
+  let t = text.replace(/^(?:\s*<@U[A-Z0-9]+(?:\|[^>]+)?>\s*)+/g, "").trim();
+  t = t.replace(/^@?franbird\b[,:]?\s*/i, "").trim();
+  t = t.replace(/^(?:please|pls|can you|could you|hey)\s+/i, "").trim();
+
+  let briefing: BriefingMode = "optional";
+  const prefixBrief = t.match(/^briefing\s*[=:]\s*(optional|required)\s+/i);
+  if (prefixBrief !== null && prefixBrief[1] !== undefined) {
+    briefing = prefixBrief[1].toLowerCase() === "required" ? "required" : "optional";
+    t = t.slice(prefixBrief[0].length).trim();
+  }
+
+  const verb = t.match(/^(?:tell|ask)\s+/i);
+  if (verb === null) return { ok: false, reason: "bad_franbird" };
+  t = t.slice(verb[0].length).trim();
+
+  const assigneeMatch = t.match(/^<@(U[A-Z0-9]+)(?:\|[^>]+)?>\s*/);
+  if (assigneeMatch === null || assigneeMatch[1] === undefined) {
+    return { ok: false, reason: "bad_franbird" };
+  }
+  const assigneeSlackUserId = parseSlackUserId(assigneeMatch[1]);
   if (assigneeSlackUserId === null) return { ok: false, reason: "bad_franbird" };
-  const body = bodyRaw.trim();
+  t = t.slice(assigneeMatch[0].length).trim();
+  t = t.replace(/^(?:to|:)\s+/i, "").trim();
+
+  const trailBrief = t.match(
+    /\s+(?:briefing\s*[=:\s]\s*|\(briefing\s+)(optional|required)\)?\s*$/i,
+  );
+  if (trailBrief !== null && trailBrief[1] !== undefined) {
+    briefing = trailBrief[1].toLowerCase() === "required" ? "required" : "optional";
+    t = t.slice(0, trailBrief.index).trim();
+  }
+
+  const body = t.trim();
   if (body.length === 0) return { ok: false, reason: "bad_franbird" };
-  const briefing: BriefingMode = briefingRaw === "required" ? "required" : "optional";
   return { ok: true, value: { assigneeSlackUserId, body, briefing } };
 }
+
 export function stampForReaction(emoji: string): StampKind | null {
   return REACTION_TO_STAMP[emoji] ?? null;
 }
