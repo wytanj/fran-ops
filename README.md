@@ -73,6 +73,16 @@ A thrown post marks the row `failed`. `publishPending` does not pick up a `faile
 - Do not open a task from free text.
 - Do not apply `migrations/001_bus.sql` to a shared database from a kicked session. That apply is class D. The outer loop runs it only after JT says yes in his own words.
 
+## Deploy (DigitalOcean Singapore VPS)
+
+Always-on bus on a DigitalOcean droplet in `sgp1` (Singapore), Ubuntu 24.04, with Caddy TLS + systemd + Bun. A modest Basic shared CPU size such as `s-1vcpu-2gb` is sufficient for the scaffold.
+
+- Scaffold + install notes: [deploy/vps/README.md](deploy/vps/README.md)
+- JT bootstrap checklist: [docs/deploy-digitalocean-sg.md](docs/deploy-digitalocean-sg.md)
+- Alternate note: Fly.io region `sin` may be evaluated later; keep Caddy + Bun + systemd on the DigitalOcean droplet as the primary path.
+
+Canonical host: ops.heyfran.co -> Slack Events at /slack/events. The former .com host had NS issues. Scaffold only; Class C merge of Slack #1 is still after JT install.
+
 ## Next
 
 `contextpacks/NEXT.md` names the slices that come after this one.

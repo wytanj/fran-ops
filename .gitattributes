@@ -1,0 +1,2 @@
+deploy/vps/** text eol=lf
+deploy/vps/install.sh text eol=lf
