@@ -19,6 +19,11 @@ Hot / warm / version-store / Drive-context rules: `docs/adr/0003-storage-tiering
 - Optional: `linkDriveFolderPurpose` to register a human Drive folder purpose row.
 - Later: copy recent WA media onto an allowlisted Slack channel once PR #1 Slack install is live; blob archive still goes to Supabase Storage.
 
+## Channel plan (2026-10-01)
+
+Priority: deepen live Slack first (permissions done), then wacli history + Telegram webhook.
+Full plan: `docs/plans/2026-10-01-channels-slack-wa-tg.md` (ADR `docs/adr/0004-multi-channel-surfaces.md`).
+
 ## Telegram bird client
 
 fran-bird on Telegram reads and writes the same event types as Slack. It should publish rows where `outbox.destination` is `telegram`. `publishPending` leaves those rows `pending` until that client exists.
