@@ -76,3 +76,22 @@ A thrown post marks the row `failed`. `publishPending` does not pick up a `faile
 ## Next
 
 `contextpacks/NEXT.md` names the slices that come after this one.
+
+## Storage tiers
+
+Media and archives are split across the hot Postgres index, warm git packs, versioned Supabase Storage objects, and contextual/organized Google Drive files. The hot index links both stores: `supabase_object_path` for the version object and `drive_folder_id` / `drive_folders` for placement/context.
+
+| Tier | Where | Role |
+| --- | --- | --- |
+| HOT | Supabase / Postgres (`media_index`) | JIDs, timestamps, tags, staff/task links, `supabase_object_path`, optional `drive_folder_id` / `drive_folders` links -- **no blobs**, no long-lived signed URLs |
+| WARM | git `contextpacks/` | Short curated `.md` for agent context; prune/rollup so the repo stays lean |
+| VERSION STORE | **Supabase Storage** | Versioned file objects for WA media, PDFs, and archival packs; retrieve/replace as artifacts evolve; humans pull via signed URLs minted at read time |
+| Drive | `drive_folders` | Contextual/organized Google Drive files and folder purpose/context; index links `drive_folder_id` for franbird placement/context answers -- **not** the version store |
+
+Slack is the recent human media inbox, not the long-term archive.
+
+- ADR: `docs/adr/0003-storage-tiering.md`
+- Ops guide: `docs/storage-tiers.md`
+- Migration (do not apply without JT yes): `migrations/002_storage_index.sql`
+- Types/helpers: `src/storage.ts`
+- WhatsApp stubs: `src/wacli/`
