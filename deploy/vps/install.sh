@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Idempotent-ish host install for fran-ops on Ubuntu 24.04 (Hetzner CX22).
+# Idempotent-ish host install for fran-ops on Ubuntu 24.04 DigitalOcean Singapore (`sgp1`) droplet.
 # Run as root from a cloned fran-ops tree:  sudo bash deploy/vps/install.sh
 # Does NOT write secrets, apply DB migrations, or touch Slack live config.
 
