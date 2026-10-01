@@ -19,7 +19,7 @@ function portOf(server: Server): number {
   return address.port;
 }
 
-test("Bolt accepts a signed /fran command, a channel message, and a done reaction", async () => {
+test("Bolt accepts a signed /bird command, a channel message, and a done reaction", async () => {
   const db = await freshDb();
   await linkStaff(db, {
     staffId: staffA,
@@ -47,7 +47,7 @@ test("Bolt accepts a signed /fran command, a channel message, and a done reactio
     expect(unsigned.status).toBe(401);
 
     const commandBody = new URLSearchParams({
-      command: "/fran",
+      command: "/bird",
       text: "shift_open",
       user_id: slackUser,
       channel_id: slackChannel,
@@ -67,7 +67,7 @@ test("Bolt accepts a signed /fran command, a channel message, and a done reactio
     expect(await commandRes.text()).toContain("Opened Open shift.");
 
     const freeBody = new URLSearchParams({
-      command: "/fran",
+      command: "/bird",
       text: "shift_open buy milk",
       user_id: slackUser,
       channel_id: slackChannel,

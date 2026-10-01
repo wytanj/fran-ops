@@ -105,3 +105,23 @@ export function ackCard(input: {
     ],
   };
 }
+
+export function resolvedTellCard(input: {
+  body: string;
+  decision: "approve" | "send_back";
+}): SlackCard {
+  const label = input.decision === "approve" ? "Approved" : "Sent back";
+  return {
+    text: `Franbird tell — ${label}`,
+    blocks: [
+      {
+        type: "header",
+        text: { type: "plain_text", text: `Franbird tell — ${label}` },
+      },
+      {
+        type: "section",
+        text: { type: "mrkdwn", text: input.body },
+      },
+    ],
+  };
+}
