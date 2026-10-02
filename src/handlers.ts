@@ -13,11 +13,19 @@ import {
   type BusReason,
   type StaffId,
 } from "./domain.ts";
+import {
+  classifyStaffIntent,
+  formatRouteReply,
+  runToolStubs,
+  shouldSkipRouting,
+} from "./routing.ts";
+import type { ThreadContext } from "./thread.ts";
+import { threadTextsForRouting } from "./thread.ts";
 
 function replyFor(reason: BusReason): string {
   switch (reason) {
     case "unknown_template":
-      return `Use a template: ${TASK_TEMPLATE_KEYS.join(", ")}.`;
+      return `Use a template: ${TASK_TEMPLATE_KEYS.join(", ")}. Or ask about roster/docs/sku/pos (read stubs).`;
     case "free_text":
       return "Templates do not take free text.";
     case "channel_not_allowlisted":
@@ -47,10 +55,39 @@ function requireStaffId(raw: string): StaffId {
   return staffId;
 }
 
+function helpText(): string {
+  return [
+    "Franbird commands:",
+    `• Templates: ${TASK_TEMPLATE_KEYS.join(", ")}`,
+    "• tell <@user> <message> [briefing=optional|required]",
+    "• In a thread: @Franbird / /bird loads thread context (conversations.replies) and replies in-thread",
+    "• Read stubs (staff-linked): roster | docs | sku/inventory | pos/sales — no auto writes",
+    "Writes stay approval-card only.",
+  ].join("\n");
+}
+
+function tryStaffRoute(text: string, thread: ThreadContext | null | undefined): string | null {
+  if (shouldSkipRouting(text)) return null;
+  const decision = classifyStaffIntent({
+    text,
+    threadTexts: threadTextsForRouting(thread),
+  });
+  if (decision.intent === "unknown") return null;
+  const stubs = runToolStubs(decision.tools);
+  const reply = formatRouteReply(decision, stubs);
+  return reply.length > 0 ? reply : null;
+}
+
 export async function handleFranCommand(
   db: Db,
   grants: readonly ChannelGrant[],
-  input: { text: string; slackUserId: string; channelId: string; triggerId: string },
+  input: {
+    text: string;
+    slackUserId: string;
+    channelId: string;
+    triggerId: string;
+    thread?: ThreadContext | null;
+  },
 ): Promise<{ reply: string }> {
   const channelId = parseSlackChannelId(input.channelId);
   const slackUserId = parseSlackUserId(input.slackUserId);
@@ -62,6 +99,17 @@ export async function handleFranCommand(
   }
   const staff = await findStaffBySurface(db, "slack", slackUserId);
   if (staff === null) return { reply: replyFor("unknown_staff") };
+
+  const trimmed = input.text.trim();
+  if (trimmed === "" || /^help\b/i.test(trimmed)) {
+    return { reply: helpText() };
+  }
+  if (/^whoami\b/i.test(trimmed)) {
+    const label = staff.displayName?.trim() || staff.staffId.slice(0, 8);
+    return {
+      reply: `Linked as ${label} (${staff.employment}). Slack <@${slackUserId}>.`,
+    };
+  }
 
   const tell = parseFranbirdTell(input.text);
   if (tell.ok) {
@@ -83,6 +131,9 @@ export async function handleFranCommand(
       reply: `Logged ${openedTell.value.title}. Briefing ${tell.value.briefing}.`,
     };
   }
+
+  const routed = tryStaffRoute(input.text, input.thread);
+  if (routed !== null) return { reply: routed };
 
   const parsed = parseFranText(input.text);
   if (!parsed.ok) return { reply: replyFor(parsed.reason) };
@@ -189,6 +240,7 @@ export async function handleAppMention(
     channelId: string;
     slackUserId: string;
     text: string;
+    thread?: ThreadContext | null;
   },
 ): Promise<{ ok: boolean; reply: string; taskId?: string }> {
   const channelId = parseSlackChannelId(input.channelId);
@@ -199,27 +251,67 @@ export async function handleAppMention(
   if (findGrant(grants, "slack", channelId) === null) {
     return { ok: false, reply: replyFor("channel_not_allowlisted") };
   }
-  const parsed = parseFranbirdTell(input.text);
-  if (!parsed.ok) return { ok: false, reply: replyFor(parsed.reason) };
+
+  const stripped = input.text
+    .replace(/^(?:\s*<@U[A-Z0-9]+(?:\|[^>]+)?>\s*)+/g, "")
+    .replace(/^@?franbird\b[,:]?\s*/i, "")
+    .trim();
+
+  if (stripped === "" || /^help\b/i.test(stripped)) {
+    return { ok: false, reply: helpText() };
+  }
+
   const opener = await findStaffBySurface(db, "slack", slackUserId);
   if (opener === null) return { ok: false, reply: replyFor("unknown_staff") };
-  const assignee = await findStaffBySurface(db, "slack", parsed.value.assigneeSlackUserId);
-  if (assignee === null) return { ok: false, reply: replyFor("unknown_assignee") };
-  const opened = await openFranbirdTell(db, {
-    grants,
-    openerStaffId: requireStaffId(opener.staffId),
-    assigneeStaffId: requireStaffId(assignee.staffId),
-    assigneeSlackUserId: parsed.value.assigneeSlackUserId,
-    surface: "slack",
-    channelId,
-    body: parsed.value.body,
-    briefing: parsed.value.briefing,
-    idempotencyKey: `slack:app_mention:${input.eventId}`,
-  });
-  if (!opened.ok) return { ok: false, reply: replyFor(opened.reason) };
-  return {
-    ok: true,
-    reply: `Logged ${opened.value.title}. Briefing ${parsed.value.briefing}.`,
-    taskId: opened.value.taskId,
-  };
+
+  if (/^whoami\b/i.test(stripped)) {
+    const label = opener.displayName?.trim() || opener.staffId.slice(0, 8);
+    return {
+      ok: false,
+      reply: `Linked as ${label} (${opener.employment}). Slack <@${slackUserId}>.`,
+    };
+  }
+
+  const parsed = parseFranbirdTell(input.text);
+  if (parsed.ok) {
+    const assignee = await findStaffBySurface(db, "slack", parsed.value.assigneeSlackUserId);
+    if (assignee === null) return { ok: false, reply: replyFor("unknown_assignee") };
+    const opened = await openFranbirdTell(db, {
+      grants,
+      openerStaffId: requireStaffId(opener.staffId),
+      assigneeStaffId: requireStaffId(assignee.staffId),
+      assigneeSlackUserId: parsed.value.assigneeSlackUserId,
+      surface: "slack",
+      channelId,
+      body: parsed.value.body,
+      briefing: parsed.value.briefing,
+      idempotencyKey: `slack:app_mention:${input.eventId}`,
+    });
+    if (!opened.ok) return { ok: false, reply: replyFor(opened.reason) };
+    return {
+      ok: true,
+      reply: `Logged ${opened.value.title}. Briefing ${parsed.value.briefing}.`,
+      taskId: opened.value.taskId,
+    };
+  }
+
+  const routed = tryStaffRoute(stripped, input.thread);
+  if (routed !== null) return { ok: false, reply: routed };
+
+  // Template via mention: "@Franbird shift_open"
+  const asTemplate = parseFranText(stripped);
+  if (asTemplate.ok) {
+    const opened = await openTask(db, {
+      grants,
+      templateKey: asTemplate.value.templateKey,
+      staffId: requireStaffId(opener.staffId),
+      surface: "slack",
+      channelId,
+      idempotencyKey: `slack:app_mention:${input.eventId}`,
+    });
+    if (!opened.ok) return { ok: false, reply: replyFor(opened.reason) };
+    return { ok: true, reply: `Opened ${opened.value.title}.`, taskId: opened.value.taskId };
+  }
+
+  return { ok: false, reply: replyFor(asTemplate.reason) };
 }

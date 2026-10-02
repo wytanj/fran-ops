@@ -1,9 +1,10 @@
 import { App, ExpressReceiver, LogLevel } from "@slack/bolt";
-import { CHANNEL_ALLOWLIST, type ChannelGrant } from "./allowlist.ts";
+import { CHANNEL_ALLOWLIST, loadChannelAllowlist, type ChannelGrant } from "./allowlist.ts";
 import { pgDb, type Db } from "./db.ts";
 import { resolvedTellCard } from "./cards.ts";
 import { handleAppMention, handleCardAction, handleChannelMessage, handleFranCommand, handleReaction } from "./handlers.ts";
 import { publishPending, type SlackPoster } from "./publish.ts";
+import { loadThreadContext, pickThreadTs, replyThreadTs, type SlackRepliesClient } from "./thread.ts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -67,6 +68,16 @@ export function parseSlackCardAction(
   };
 }
 
+async function maybeLoadThread(
+  client: SlackRepliesClient,
+  channelId: string,
+  source: unknown,
+): Promise<Awaited<ReturnType<typeof loadThreadContext>> | null> {
+  const threadTs = pickThreadTs(source);
+  if (threadTs === null) return null;
+  return loadThreadContext(client, { channelId, threadTs });
+}
+
 export function createSlackApp(opts: {
   db: Db;
   botToken: string;
@@ -98,19 +109,20 @@ export function createSlackApp(opts: {
     await handleChannelMessage(opts.db, grants, parsed);
   });
 
-  app.event("app_mention", async ({ event, body, say }) => {
+  app.event("app_mention", async ({ event, body, say, client }) => {
     if (!isRecord(event) || !isRecord(body)) return;
     if (typeof event.channel !== "string" || typeof event.user !== "string" || typeof event.text !== "string") return;
     if (typeof body.event_id !== "string") return;
+    const thread = await maybeLoadThread(client as SlackRepliesClient, event.channel, event);
     const result = await handleAppMention(opts.db, grants, {
       eventId: body.event_id,
       channelId: event.channel,
       slackUserId: event.user,
       text: event.text,
+      thread,
     });
-    if (!result.ok) {
-      await say({ text: result.reply, thread_ts: typeof event.ts === "string" ? event.ts : undefined });
-    }
+    const threadTs = replyThreadTs(event);
+    await say({ text: result.reply, thread_ts: threadTs });
   });
 
   app.event("reaction_added", async ({ event }) => {
@@ -119,13 +131,16 @@ export function createSlackApp(opts: {
     await handleReaction(opts.db, grants, parsed);
   });
 
-  app.command("/bird", async ({ command, ack }) => {
+  app.command("/bird", async ({ command, ack, client }) => {
+    const thread = await maybeLoadThread(client as SlackRepliesClient, command.channel_id, command);
     const result = await handleFranCommand(opts.db, grants, {
       text: command.text,
       slackUserId: command.user_id,
       channelId: command.channel_id,
       triggerId: command.trigger_id,
+      thread,
     });
+    // Slash ack is ephemeral; when invoked in a thread Slack still scopes it there.
     await ack({ response_type: "ephemeral", text: result.reply });
   });
 
@@ -180,7 +195,8 @@ export async function startFromEnv(env: NodeJS.ProcessEnv = process.env): Promis
   const port = Number(env.PORT ?? "3000");
   if (!Number.isInteger(port) || port <= 0) throw new Error("PORT must be a positive integer");
   const db = pgDb(databaseUrl);
-  const app = createSlackApp({ db, botToken, signingSecret, verifyToken: true });
+  const grants = loadChannelAllowlist(env);
+  const app = createSlackApp({ db, botToken, signingSecret, grants, verifyToken: true });
   const poster = webPoster(app.client);
   const timer = setInterval(() => {
     void publishPending(db, poster).catch((error: unknown) => {
