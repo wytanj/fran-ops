@@ -13,11 +13,11 @@
 ## Stubbed
 
 - Staff routing intents → tool allowlists (`hrm.roster`, `docs.index`, `skums.read`, `pos.read`) return stub messages only
-- `LLM_ROUTING_ENABLED = false` (no LLM gate)
+- `LLM_ROUTING_ENABLED` env + `XAI_API_KEY` → xAI chat completions classify freeform → intents (tool stubs + kiv/ask/escalate); off = keywords
 - No live FranHRM / docs / skums / pos reads
 - No BotFather / Telegram / wacli / WH Class C
 - No auto-commit of writes
 
 ## Deploy note
 
-Do not merge/deploy until JT/CoS review. Leave PRs #5/#6 alone.
+LLM path is env-gated. Writes stay approval-card only. Leave WH / fran-pos held PRs alone.
