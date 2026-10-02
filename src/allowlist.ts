@@ -1,4 +1,4 @@
-import { parseSlackChannelId, type ChannelId, type Surface } from "./domain.ts";
+import { parseChannelId, parseSlackChannelId, type ChannelId, type Surface } from "./domain.ts";
 
 export type ChannelGrant = {
   surface: Surface;
@@ -57,12 +57,41 @@ export function mergeChannelGrants(
   return out;
 }
 
-/** Runtime allowlist: code base + `SLACK_EXTRA_CHANNELS` (if set). */
+
+/**
+ * Parse JT-supplied extra Telegram chats from env.
+ * Format: `555100:ops-tg,555200:floor` (comma or semicolon).
+ */
+export function parseExtraTelegramChatGrants(raw: string | undefined | null): ChannelGrant[] {
+  if (raw === undefined || raw === null) return [];
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return [];
+  const out: ChannelGrant[] = [];
+  const seen = new Set<string>();
+  for (const part of trimmed.split(/[,;]/)) {
+    const token = part.trim();
+    if (token.length === 0) continue;
+    const colon = token.indexOf(":");
+    const idPart = (colon === -1 ? token : token.slice(0, colon)).trim();
+    const namePart = (colon === -1 ? "extra" : token.slice(colon + 1)).trim();
+    const channelId = parseChannelId(idPart);
+    if (channelId === null) continue;
+    if (seen.has(channelId)) continue;
+    seen.add(channelId);
+    out.push({ surface: "telegram", channelId, name: namePart.length > 0 ? namePart : "extra" });
+  }
+  return out;
+}
+
+/** Runtime allowlist: code base + `SLACK_EXTRA_CHANNELS` + `TELEGRAM_EXTRA_CHATS` (if set). */
 export function loadChannelAllowlist(
   env: NodeJS.ProcessEnv = process.env,
   base: readonly ChannelGrant[] = CHANNEL_ALLOWLIST,
 ): readonly ChannelGrant[] {
-  const extras = parseExtraSlackChannelGrants(env.SLACK_EXTRA_CHANNELS);
+  const extras = [
+    ...parseExtraSlackChannelGrants(env.SLACK_EXTRA_CHANNELS),
+    ...parseExtraTelegramChatGrants(env.TELEGRAM_EXTRA_CHATS),
+  ];
   return mergeChannelGrants(base, extras);
 }
 

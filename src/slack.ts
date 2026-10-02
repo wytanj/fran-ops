@@ -3,6 +3,8 @@ import { CHANNEL_ALLOWLIST, loadChannelAllowlist, type ChannelGrant } from "./al
 import { pgDb, type Db } from "./db.ts";
 import { resolvedTellCard } from "./cards.ts";
 import { handleAppMention, handleCardAction, handleChannelMessage, handleFranCommand, handleReaction } from "./handlers.ts";
+import { handleBillCardAction } from "./bill_handlers.ts";
+import { mountTelegramWebhook } from "./telegram.ts";
 import { publishPending, type SlackPoster } from "./publish.ts";
 import { loadThreadContext, pickThreadTs, replyThreadTs, type SlackRepliesClient } from "./thread.ts";
 
@@ -86,6 +88,7 @@ export function createSlackApp(opts: {
   botId?: string;
   botUserId?: string;
   verifyToken?: boolean;
+  env?: NodeJS.ProcessEnv;
 }): App {
   const grants = opts.grants ?? CHANNEL_ALLOWLIST;
   const receiver = new ExpressReceiver({
@@ -102,6 +105,7 @@ export function createSlackApp(opts: {
     logLevel: LogLevel.ERROR,
     socketMode: false,
   });
+  mountTelegramWebhook(receiver.app, { db: opts.db, grants, env: opts.env ?? process.env });
 
   app.event("message", async ({ event, body }) => {
     const parsed = parseSlackMessage(event, body);
@@ -123,6 +127,13 @@ export function createSlackApp(opts: {
     });
     const threadTs = replyThreadTs(event);
     await say({ text: result.reply, thread_ts: threadTs });
+    if (result.billCard !== undefined) {
+      await say({
+        text: result.billCard.text,
+        blocks: result.billCard.blocks,
+        thread_ts: result.billThreadRef ?? threadTs,
+      });
+    }
   });
 
   app.event("reaction_added", async ({ event }) => {
@@ -142,6 +153,15 @@ export function createSlackApp(opts: {
     });
     // Slash ack is ephemeral; when invoked in a thread Slack still scopes it there.
     await ack({ response_type: "ephemeral", text: result.reply });
+    if (result.billCard !== undefined) {
+      const threadTs = result.billThreadRef ?? thread?.threadTs ?? undefined;
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: result.billCard.text,
+        blocks: result.billCard.blocks,
+        thread_ts: threadTs,
+      });
+    }
   });
 
   app.action(/^card\./, async ({ action, body, ack, respond }) => {
@@ -164,6 +184,36 @@ export function createSlackApp(opts: {
       text: card.text,
       blocks: card.blocks,
     });
+  });
+
+  app.action(/^bill\./, async ({ action, body, ack, respond }) => {
+    const parsed = parseSlackCardAction(action, body);
+    await ack();
+    if (parsed === null) return;
+    const result = await handleBillCardAction(opts.db, {
+      actionId: parsed.actionId,
+      expenseId: parsed.taskId,
+      slackUserId: parsed.slackUserId,
+      actionTs: parsed.actionTs,
+    });
+    if (!result.recorded) {
+      await respond({
+        response_type: "ephemeral",
+        text: result.reply ?? "Could not record that bill action.",
+      });
+      return;
+    }
+    if (result.card !== undefined) {
+      await respond({
+        replace_original: true,
+        text: result.card.text,
+        blocks: result.card.blocks,
+      });
+      return;
+    }
+    if (result.reply !== undefined) {
+      await respond({ response_type: "ephemeral", text: result.reply });
+    }
   });
 
   return app;
@@ -196,7 +246,7 @@ export async function startFromEnv(env: NodeJS.ProcessEnv = process.env): Promis
   if (!Number.isInteger(port) || port <= 0) throw new Error("PORT must be a positive integer");
   const db = pgDb(databaseUrl);
   const grants = loadChannelAllowlist(env);
-  const app = createSlackApp({ db, botToken, signingSecret, grants, verifyToken: true });
+  const app = createSlackApp({ db, botToken, signingSecret, grants, verifyToken: true, env });
   const poster = webPoster(app.client);
   const timer = setInterval(() => {
     void publishPending(db, poster).catch((error: unknown) => {

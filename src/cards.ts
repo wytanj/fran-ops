@@ -125,3 +125,145 @@ export function resolvedTellCard(input: {
     ],
   };
 }
+
+
+export function expenseConfirmCard(input: {
+  expenseId: string;
+  amountLabel: string;
+  payerLabel: string;
+  shareLines: string;
+  merchant: string | null;
+  confidence: "high" | "ambiguous";
+  receiptNote?: string | null;
+}): SlackCard {
+  const conf = input.confidence === "ambiguous" ? "Ambiguous parse — confirm before commit" : "Confirm expense";
+  const merchant = input.merchant ? `*Merchant* ${input.merchant}\n` : "";
+  const receipt = input.receiptNote ? `*Receipt* ${input.receiptNote}\n` : "";
+  return {
+    text: `Expense ${input.amountLabel}`,
+    blocks: [
+      {
+        type: "header",
+        text: { type: "plain_text", text: conf },
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `${merchant}${receipt}*Amount* ${input.amountLabel}\n*Paid by* ${input.payerLabel}\n*Shares*\n${input.shareLines}`,
+        },
+      },
+      {
+        type: "actions",
+        block_id: `bill.${input.expenseId}`,
+        elements: [
+          {
+            type: "button",
+            action_id: "bill.confirm",
+            style: "primary",
+            text: { type: "plain_text", text: "Confirm" },
+            value: input.expenseId,
+          },
+          {
+            type: "button",
+            action_id: "bill.reject",
+            text: { type: "plain_text", text: "Reject" },
+            value: input.expenseId,
+          },
+        ],
+      },
+    ],
+  };
+}
+
+export function tallyCard(input: {
+  channelLabel: string;
+  balanceLines: string;
+  suggestionLines: string;
+  expenseIdForActions?: string | null;
+}): SlackCard {
+  const suggestions =
+    input.suggestionLines.length > 0
+      ? `\n\n*Suggested settles*\n${input.suggestionLines}`
+      : "";
+  const actions =
+    input.expenseIdForActions !== undefined && input.expenseIdForActions !== null
+      ? ([
+          {
+            type: "actions" as const,
+            block_id: `bill.tally.${input.expenseIdForActions}`,
+            elements: [
+              {
+                type: "button" as const,
+                action_id: "bill.mark_paid",
+                style: "primary" as const,
+                text: { type: "plain_text" as const, text: "Mark paid" },
+                value: input.expenseIdForActions,
+              },
+              {
+                type: "button" as const,
+                action_id: "bill.remind",
+                text: { type: "plain_text" as const, text: "Remind" },
+                value: input.expenseIdForActions,
+              },
+            ],
+          },
+        ] as KnownBlock[])
+      : [];
+  return {
+    text: `Tally — ${input.channelLabel}`,
+    blocks: [
+      {
+        type: "header",
+        text: { type: "plain_text", text: `Tally — ${input.channelLabel}` },
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*Balances*\n${input.balanceLines}${suggestions}`,
+        },
+      },
+      ...actions,
+    ],
+  };
+}
+
+export function settleAckCard(input: {
+  fromLabel: string;
+  toLabel: string;
+  amountLabel: string;
+}): SlackCard {
+  return {
+    text: `Settled ${input.amountLabel}`,
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `Recorded: ${input.fromLabel} paid ${input.toLabel} ${input.amountLabel}.`,
+        },
+      },
+    ],
+  };
+}
+
+export function resolvedBillCard(input: {
+  decision: "confirm" | "reject";
+  summary: string;
+}): SlackCard {
+  const label = input.decision === "confirm" ? "Confirmed" : "Rejected";
+  return {
+    text: `Expense — ${label}`,
+    blocks: [
+      {
+        type: "header",
+        text: { type: "plain_text", text: `Expense — ${label}` },
+      },
+      {
+        type: "section",
+        text: { type: "mrkdwn", text: input.summary },
+      },
+    ],
+  };
+}

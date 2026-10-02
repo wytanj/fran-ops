@@ -19,6 +19,7 @@ import {
   runToolStubs,
   shouldSkipRouting,
 } from "./routing.ts";
+import { handleBillCommand, isBillText } from "./bill_handlers.ts";
 import type { ThreadContext } from "./thread.ts";
 import { threadTextsForRouting } from "./thread.ts";
 
@@ -62,6 +63,8 @@ function helpText(): string {
     "• tell <@user> <message> [briefing=optional|required]",
     "• In a thread: @Franbird / /bird loads thread context (conversations.replies) and replies in-thread",
     "• Read stubs (staff-linked): roster | docs | sku/inventory | pos/sales — no auto writes",
+    "• Bill-split: split <amount> [merchant] with <@user>… | tally | paid/settle <@user> <amount> | remind",
+    "• Receipt image → extract → confirm card (no auto-commit)",
     "Writes stay approval-card only.",
   ].join("\n");
 }
@@ -88,7 +91,7 @@ export async function handleFranCommand(
     triggerId: string;
     thread?: ThreadContext | null;
   },
-): Promise<{ reply: string }> {
+): Promise<{ reply: string; billCard?: import("./cards.ts").SlackCard; billThreadRef?: string | null }> {
   const channelId = parseSlackChannelId(input.channelId);
   const slackUserId = parseSlackUserId(input.slackUserId);
   if (channelId === null || slackUserId === null || input.triggerId.trim() === "") {
@@ -109,6 +112,17 @@ export async function handleFranCommand(
     return {
       reply: `Linked as ${label} (${staff.employment}). Slack <@${slackUserId}>.`,
     };
+  }
+
+  if (isBillText(trimmed)) {
+    const bill = await handleBillCommand(db, grants, {
+      text: trimmed,
+      slackUserId: input.slackUserId,
+      channelId: input.channelId,
+      triggerId: input.triggerId,
+      threadRef: input.thread?.threadTs ?? null,
+    });
+    return { reply: bill.reply, billCard: bill.card, billThreadRef: bill.threadRef };
   }
 
   const tell = parseFranbirdTell(input.text);
@@ -242,7 +256,7 @@ export async function handleAppMention(
     text: string;
     thread?: ThreadContext | null;
   },
-): Promise<{ ok: boolean; reply: string; taskId?: string }> {
+): Promise<{ ok: boolean; reply: string; taskId?: string; billCard?: import("./cards.ts").SlackCard; billThreadRef?: string | null }> {
   const channelId = parseSlackChannelId(input.channelId);
   const slackUserId = parseSlackUserId(input.slackUserId);
   if (channelId === null || slackUserId === null || input.eventId.trim() === "") {
@@ -269,6 +283,22 @@ export async function handleAppMention(
     return {
       ok: false,
       reply: `Linked as ${label} (${opener.employment}). Slack <@${slackUserId}>.`,
+    };
+  }
+
+  if (isBillText(stripped)) {
+    const bill = await handleBillCommand(db, grants, {
+      text: stripped,
+      slackUserId: input.slackUserId,
+      channelId: input.channelId,
+      triggerId: input.eventId,
+      threadRef: input.thread?.threadTs ?? null,
+    });
+    return {
+      ok: true,
+      reply: bill.reply,
+      billCard: bill.card,
+      billThreadRef: bill.threadRef,
     };
   }
 

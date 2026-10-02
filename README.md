@@ -105,3 +105,8 @@ Slack is the recent human media inbox, not the long-term archive.
 - Migration (do not apply without JT yes): `migrations/002_storage_index.sql`
 - Types/helpers: `src/storage.ts`
 - WhatsApp stubs: `src/wacli/`
+
+## Bill-split
+
+Splitwise-lite on the bus DB (Slack + Telegram). See [docs/bill-split.md](docs/bill-split.md). Migration `004_bill_split.sql` is Class D on the droplet.
+
