@@ -41,8 +41,14 @@ test("migration names the seven bus tables and the shared literals", async () =>
      order by table_name`,
   );
   expect(tables.map((row) => row.table_name)).toEqual([
+    "bill_expenses",
+    "bill_settlements",
+    "bill_shares",
     "channel_allowlist",
+    "contextpack_meta",
+    "drive_folders",
     "events",
+    "media_index",
     "outbox",
     "staff_identities",
     "stamps",
