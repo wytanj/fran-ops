@@ -14,7 +14,7 @@ import {
   type StaffId,
 } from "./domain.ts";
 import {
-  classifyStaffIntent,
+  classifyStaffIntentAsync,
   formatRouteReply,
   runToolStubs,
   shouldSkipRouting,
@@ -66,9 +66,9 @@ function helpText(): string {
   ].join("\n");
 }
 
-function tryStaffRoute(text: string, thread: ThreadContext | null | undefined): string | null {
+async function tryStaffRoute(text: string, thread: ThreadContext | null | undefined): Promise<string | null> {
   if (shouldSkipRouting(text)) return null;
-  const decision = classifyStaffIntent({
+  const decision = await classifyStaffIntentAsync({
     text,
     threadTexts: threadTextsForRouting(thread),
   });
@@ -132,7 +132,7 @@ export async function handleFranCommand(
     };
   }
 
-  const routed = tryStaffRoute(input.text, input.thread);
+  const routed = await tryStaffRoute(input.text, input.thread);
   if (routed !== null) return { reply: routed };
 
   const parsed = parseFranText(input.text);
@@ -295,7 +295,7 @@ export async function handleAppMention(
     };
   }
 
-  const routed = tryStaffRoute(stripped, input.thread);
+  const routed = await tryStaffRoute(stripped, input.thread);
   if (routed !== null) return { ok: false, reply: routed };
 
   // Template via mention: "@Franbird shift_open"
