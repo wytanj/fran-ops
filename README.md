@@ -44,7 +44,7 @@ An `app_mention` whose text matches `tell <@U012ABC> <message> briefing=optional
 
 `card.approve` writes `card.approved`. `card.send_back` writes `card.sent_back`.
 
-`CHANNEL_ALLOWLIST` in `src/allowlist.ts` ships empty. Add a channel in that file. A channel that exists only in `channel_allowlist` does not admit a new event.
+`CHANNEL_ALLOWLIST` in `src/allowlist.ts` lists `all-fran` and `#it-helpdesk`. Add a permanent channel in that file. `SLACK_EXTRA_CHANNELS` adds more at runtime. A channel that exists only in `channel_allowlist` does not admit a new event.
 
 ## Env vars JT must set
 
@@ -65,7 +65,7 @@ A thrown post marks the row `failed`. `publishPending` does not pick up a `faile
 
 ## Checks
 
-`bun test` applies `migrations/001_bus.sql` on embedded Postgres, runs the bus commands, and posts signed requests at a local Bolt server. `bun run typecheck` runs `tsc --noEmit`.
+`bun test` applies every file in `migrations/` on embedded Postgres, runs the bus commands, and posts signed requests at a local Bolt server. `bun run typecheck` runs `tsc --noEmit`.
 
 ## Constraints
 
@@ -105,6 +105,12 @@ Slack is the recent human media inbox, not the long-term archive.
 - Migration (do not apply without JT yes): `migrations/002_storage_index.sql`
 - Types/helpers: `src/storage.ts`
 - WhatsApp stubs: `src/wacli/`
+
+## Issue bus
+
+Hardware issues are a separate ledger from `tasks`. `migrations/005_issues.sql` creates `issues`. A photo in `#it-helpdesk` (`C0C6J930A6L`) opens one row with playbook `hardware` and status `waiting_approve`. The approve card is an outbox row posted in that photo's thread. Approve moves the row to `in_progress` and appends a Samsung Care+ email draft on `evidence` with `delivery` `outbox_ready`. Send back moves the row to `blocked`. The bus does not send the email.
+
+Set `ISSUE_APPROVER_SLACK_USER_ID` to JT's Slack user id. That id must already be on his `staff_identities` row. Playbook notes live in [docs/playbooks/hardware.md](docs/playbooks/hardware.md). Applying `migrations/005_issues.sql` on the droplet is class D.
 
 ## Bill-split
 

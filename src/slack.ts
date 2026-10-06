@@ -4,6 +4,8 @@ import { pgDb, type Db } from "./db.ts";
 import { resolvedTellCard } from "./cards.ts";
 import { handleAppMention, handleCardAction, handleChannelMessage, handleFranCommand, handleReaction } from "./handlers.ts";
 import { handleBillCardAction } from "./bill_handlers.ts";
+import { handleHardwareChannelFile, handleIssueCardAction, type HardwareSlackFile } from "./issue_handlers.ts";
+import { readIssueApproverSlackUserId } from "./issue_domain.ts";
 import { mountTelegramWebhook } from "./telegram.ts";
 import { publishPending, type SlackPoster } from "./publish.ts";
 import { loadThreadContext, pickThreadTs, replyThreadTs, type SlackRepliesClient } from "./thread.ts";
@@ -50,6 +52,65 @@ export function parseSlackReaction(event: unknown): {
     emoji: event.reaction,
     channelId: item.channel,
     messageRef: item.ts,
+  };
+}
+
+const SKIP_MESSAGE_SUBTYPES = new Set([
+  "bot_message",
+  "message_changed",
+  "message_deleted",
+  "message_replied",
+  "channel_join",
+  "channel_leave",
+  "channel_topic",
+  "channel_purpose",
+  "tombstone",
+]);
+
+const IMAGE_FILETYPES = new Set(["jpg", "jpeg", "png", "gif", "heic", "heif", "webp", "bmp"]);
+
+function isSlackImage(file: Record<string, unknown>): boolean {
+  if (typeof file.mimetype === "string" && file.mimetype.toLowerCase().startsWith("image/")) return true;
+  return typeof file.filetype === "string" && IMAGE_FILETYPES.has(file.filetype.toLowerCase());
+}
+
+function firstHttpUrl(candidates: unknown[]): string | null {
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue;
+    const trimmed = candidate.trim();
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  }
+  return null;
+}
+
+export function parseHardwareSlackFile(event: unknown, body: unknown): HardwareSlackFile | null {
+  if (!isRecord(event) || !isRecord(body)) return null;
+  if (typeof event.bot_id === "string") return null;
+  if (typeof event.subtype === "string" && SKIP_MESSAGE_SUBTYPES.has(event.subtype)) return null;
+  if (typeof event.channel !== "string" || typeof event.user !== "string" || typeof event.ts !== "string") {
+    return null;
+  }
+  if (typeof body.event_id !== "string" || body.event_id.trim() === "") return null;
+  if (!Array.isArray(event.files)) return null;
+  const photos: HardwareSlackFile["photos"] = [];
+  for (const file of event.files) {
+    if (!isRecord(file) || typeof file.id !== "string" || file.id.trim() === "") continue;
+    if (!isSlackImage(file)) continue;
+    photos.push({
+      slackFileId: file.id.trim(),
+      url: firstHttpUrl([file.url_private, file.permalink]),
+    });
+  }
+  if (photos.length === 0) return null;
+  const threadTs =
+    typeof event.thread_ts === "string" && event.thread_ts.trim() !== "" ? event.thread_ts : event.ts;
+  return {
+    eventId: body.event_id,
+    channelId: event.channel,
+    slackUserId: event.user,
+    caption: typeof event.text === "string" ? event.text : "",
+    threadTs,
+    photos,
   };
 }
 
@@ -108,6 +169,15 @@ export function createSlackApp(opts: {
   mountTelegramWebhook(receiver.app, { db: opts.db, grants, env: opts.env ?? process.env });
 
   app.event("message", async ({ event, body }) => {
+    const hardware = parseHardwareSlackFile(event, body);
+    if (hardware !== null) {
+      await handleHardwareChannelFile(
+        opts.db,
+        grants,
+        hardware,
+        readIssueApproverSlackUserId(opts.env ?? process.env),
+      );
+    }
     const parsed = parseSlackMessage(event, body);
     if (parsed === null) return;
     await handleChannelMessage(opts.db, grants, parsed);
@@ -186,6 +256,30 @@ export function createSlackApp(opts: {
     });
   });
 
+  app.action(/^issue\./, async ({ action, body, ack, respond }) => {
+    const parsed = parseSlackCardAction(action, body);
+    await ack();
+    if (parsed === null) return;
+    const result = await handleIssueCardAction(opts.db, {
+      actionId: parsed.actionId,
+      issueId: parsed.taskId,
+      slackUserId: parsed.slackUserId,
+      actionTs: parsed.actionTs,
+    });
+    if (!result.recorded || result.card === undefined) {
+      await respond({
+        response_type: "ephemeral",
+        text: result.reply ?? "Could not record that decision.",
+      });
+      return;
+    }
+    await respond({
+      replace_original: true,
+      text: result.card.text,
+      blocks: result.card.blocks,
+    });
+  });
+
   app.action(/^bill\./, async ({ action, body, ack, respond }) => {
     const parsed = parseSlackCardAction(action, body);
     await ack();
@@ -226,6 +320,7 @@ export function webPoster(client: App["client"]): SlackPoster {
         channel: message.channel,
         text: message.text,
         blocks: message.blocks,
+        ...(message.threadTs !== undefined ? { thread_ts: message.threadTs } : {}),
       });
       if (typeof result.ts !== "string" || result.ts.length === 0) {
         throw new Error("Slack did not return a message ts");

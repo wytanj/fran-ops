@@ -1,5 +1,6 @@
 import type { KnownBlock } from "@slack/types";
 import type { BriefingMode, TaskTemplateKey } from "./domain.ts";
+import type { HardwarePayload } from "./issue_domain.ts";
 
 export type SlackCard = {
   text: string;
@@ -243,6 +244,78 @@ export function settleAckCard(input: {
           type: "mrkdwn",
           text: `Recorded: ${input.fromLabel} paid ${input.toLabel} ${input.amountLabel}.`,
         },
+      },
+    ],
+  };
+}
+
+export function issueApproveCard(input: {
+  issueId: string;
+  raiserLabel: string;
+  payload: HardwarePayload;
+}): SlackCard {
+  const device = input.payload.device ?? "unknown";
+  const site = input.payload.site ?? "unknown";
+  const drop = input.payload.dropHeightMm === null ? "unknown" : `${input.payload.dropHeightMm} mm`;
+  return {
+    text: `Hardware issue ${input.issueId}`,
+    blocks: [
+      {
+        type: "header",
+        text: { type: "plain_text", text: "Hardware issue" },
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: [
+            `*Issue* ${input.issueId}`,
+            `*Raiser* ${input.raiserLabel}`,
+            `*Device* ${device}`,
+            `*Site* ${site}`,
+            `*Drop* ${drop}`,
+            `*Photos* ${input.payload.photoRefs.length}`,
+          ].join("\n"),
+        },
+      },
+      {
+        type: "actions",
+        block_id: `issue.${input.issueId}`,
+        elements: [
+          {
+            type: "button",
+            action_id: "issue.approve",
+            style: "primary",
+            text: { type: "plain_text", text: "Approve" },
+            value: input.issueId,
+          },
+          {
+            type: "button",
+            action_id: "issue.send_back",
+            text: { type: "plain_text", text: "Send back" },
+            value: input.issueId,
+          },
+        ],
+      },
+    ],
+  };
+}
+
+export function issueResolvedCard(input: {
+  issueId: string;
+  decision: "approve" | "send_back";
+}): SlackCard {
+  const label = input.decision === "approve" ? "approved" : "sent back";
+  return {
+    text: `Hardware issue ${input.issueId} ${label}`,
+    blocks: [
+      {
+        type: "header",
+        text: { type: "plain_text", text: `Hardware issue ${label}` },
+      },
+      {
+        type: "section",
+        text: { type: "mrkdwn", text: `*Issue* ${input.issueId}` },
       },
     ],
   };

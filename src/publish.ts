@@ -5,6 +5,7 @@ export type SlackPost = {
   channel: string;
   text: string;
   blocks: KnownBlock[];
+  threadTs?: string;
 };
 
 export type SlackPoster = {
@@ -18,7 +19,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function readPayload(value: unknown): SlackPost & { taskId: string; bindMessageRef: boolean } {
   const raw = typeof value === "string" ? JSON.parse(value) : value;
   if (!isRecord(raw)) throw new Error("outbox payload is not an object");
-  const { channelId, taskId, text, blocks, bindMessageRef } = raw;
+  const { channelId, taskId, text, blocks, bindMessageRef, threadTs } = raw;
   if (typeof channelId !== "string" || typeof taskId !== "string" || typeof text !== "string" || !Array.isArray(blocks)) {
     throw new Error("outbox payload is missing card fields");
   }
@@ -35,6 +36,7 @@ function readPayload(value: unknown): SlackPost & { taskId: string; bindMessageR
     blocks: parsedBlocks,
     taskId,
     bindMessageRef: bindMessageRef === false ? false : true,
+    threadTs: typeof threadTs === "string" && threadTs.trim() !== "" ? threadTs : undefined,
   };
 }
 
@@ -74,7 +76,12 @@ export async function publishPending(
   for (const row of claimed) {
     try {
       const card = readPayload(row.payload);
-      const sent = await poster.post({ channel: card.channel, text: card.text, blocks: card.blocks });
+      const sent = await poster.post({
+        channel: card.channel,
+        text: card.text,
+        blocks: card.blocks,
+        threadTs: card.threadTs,
+      });
       await db.transaction(async (query) => {
         await query(
           `update outbox
