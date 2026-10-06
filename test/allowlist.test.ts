@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   CHANNEL_ALLOWLIST,
+  IT_HELPDESK_CHANNEL_ID,
   loadChannelAllowlist,
   mergeChannelGrants,
   parseExtraSlackChannelGrants,
@@ -34,6 +35,12 @@ test("loadChannelAllowlist merges env extras without inventing ids; code wins", 
     { surface: "slack", channelId: allFran!, name: "renamed-should-not-win" },
   ]);
   expect(codeWins.find((g) => g.channelId === allFran)?.name).toBe("all-fran");
+});
+
+test("it-helpdesk is a code grant", () => {
+  const grant = CHANNEL_ALLOWLIST.find((row) => row.channelId === IT_HELPDESK_CHANNEL_ID);
+  expect(grant).toEqual({ surface: "slack", channelId: IT_HELPDESK_CHANNEL_ID, name: "it-helpdesk" });
+  expect(`${IT_HELPDESK_CHANNEL_ID}`).toBe("C0C6J930A6L");
 });
 
 test("parseSlackChannelId rejects placeholders", () => {

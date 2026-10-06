@@ -48,6 +48,7 @@ test("migration names the seven bus tables and the shared literals", async () =>
     "contextpack_meta",
     "drive_folders",
     "events",
+    "issues",
     "media_index",
     "outbox",
     "staff_identities",
