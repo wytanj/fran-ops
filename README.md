@@ -110,7 +110,9 @@ Slack is the recent human media inbox, not the long-term archive.
 
 Hardware issues are a separate ledger from `tasks`. `migrations/005_issues.sql` creates `issues`. A photo in `#it-helpdesk` (`C0C6J930A6L`) opens one row with playbook `hardware` and status `waiting_approve`. The approve card is an outbox row posted in that photo's thread. Approve moves the row to `in_progress` and appends a Samsung Care+ email draft on `evidence` with `delivery` `outbox_ready`. Send back moves the row to `blocked`. The bus does not send the email.
 
-Set `ISSUE_APPROVER_SLACK_USER_ID` to JT's Slack user id. That id must already be on his `staff_identities` row. Playbook notes live in [docs/playbooks/hardware.md](docs/playbooks/hardware.md). Applying `migrations/005_issues.sql` on the droplet is class D.
+Set `ISSUE_APPROVER_SLACK_USER_ID` to JT's Slack user id. That id must already be on his `staff_identities` row. Playbook notes live in [docs/playbooks/hardware.md](docs/playbooks/hardware.md).
+
+`migrations/006_assets.sql` adds `assets` and `asset_events`. A caption with `serial` makes raise append `crack`. Approve appends `claim_filed` and the Care+ draft. The bot writes the timeline. `oow` does not delete it. Applying `migrations/005_issues.sql` or `migrations/006_assets.sql` on the droplet is class D.
 
 ## Bill-split
 

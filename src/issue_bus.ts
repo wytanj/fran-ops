@@ -1,4 +1,11 @@
 import { findGrant, IT_HELPDESK_CHANNEL_ID, type ChannelGrant } from "./allowlist.ts";
+import {
+  appendBotEvent,
+  DEFAULT_ASSET_KIND,
+  ensureAsset,
+  parseAssetId,
+  type AssetId,
+} from "./asset_log.ts";
 import { findStaffById } from "./bus.ts";
 import { issueApproveCard } from "./cards.ts";
 import type { Db, Query } from "./db.ts";
@@ -82,11 +89,7 @@ export async function raiseHardwareIssue(
   if (approver === null) return { ok: false, reason: "approver_unconfigured" };
 
   const parsed = parseHardwareCaption(input.caption);
-  const payload: HardwarePayload = { ...parsed, photoRefs };
-  const evidence: EvidenceRef[] = [
-    ...photoRefs.map((photo) => ({ kind: "slack_file" as const, ...photo })),
-    { kind: "slack_thread", channelId: input.channelId, threadTs: input.threadTs },
-  ];
+  if (parsed.serialInvalid || parsed.kindInvalid) return { ok: false, reason: "bad_payload" };
 
   return db.transaction(async (query) => {
     await ensureChannel(query, grant);
@@ -117,6 +120,35 @@ export async function raiseHardwareIssue(
       return { ok: true, value: { issueId, status: requireStatus(row.status), created: false } };
     }
 
+    const serial = parsed.serial;
+    const linked: AssetId | null =
+      serial === null
+        ? null
+        : await ensureAsset(query, {
+            kind: parsed.kind ?? DEFAULT_ASSET_KIND,
+            serial,
+            site: parsed.site,
+            notes: null,
+            aliases: [],
+          });
+    const payload: HardwarePayload = {
+      device: parsed.device,
+      site: parsed.site,
+      dropHeightMm: parsed.dropHeightMm,
+      caption: parsed.caption,
+      serial,
+      kind: linked === null ? parsed.kind : (parsed.kind ?? DEFAULT_ASSET_KIND),
+      assetId: linked,
+      photoRefs,
+    };
+    const evidence: EvidenceRef[] = [
+      ...photoRefs.map((photo) => ({ kind: "slack_file" as const, ...photo })),
+      { kind: "slack_thread", channelId: input.channelId, threadTs: input.threadTs },
+    ];
+    if (linked !== null && serial !== null) {
+      evidence.push({ kind: "asset", assetId: linked, serial });
+    }
+
     const issues = await query<{ id: string }>(
       `insert into issues (
          playbook, status, raiser_staff_id, approver_staff_id,
@@ -144,6 +176,15 @@ export async function raiseHardwareIssue(
     if (rawId === undefined) throw new Error("issue insert returned no id");
     const issueId = parseIssueId(rawId);
     if (issueId === null) throw new Error("issue id in the database is not a uuid");
+    if (linked !== null) {
+      await appendBotEvent(query, {
+        assetId: linked,
+        eventType: "crack",
+        issueId,
+        idempotencyKey: `${input.idempotencyKey}:crack`,
+        payload: {},
+      });
+    }
     const card = issueApproveCard({
       issueId,
       raiserLabel: formatStaffLabel({
@@ -218,9 +259,15 @@ export async function decideHardwareIssue(
     if (next === null) return { ok: false, reason: "bad_status" };
 
     let evidenceEntry: EvidenceRef;
+    let claimAssetId: AssetId | null = null;
     if (input.action === "approve") {
       const payload = readHardwarePayload(row.payload);
       if (payload === null) return { ok: false, reason: "bad_payload" };
+      if (payload.assetId !== null) {
+        const assetId = parseAssetId(payload.assetId);
+        if (assetId === null) return { ok: false, reason: "bad_payload" };
+        claimAssetId = assetId;
+      }
       const draft = hardwareCarePlusDraft({ issueId, payload });
       evidenceEntry = {
         kind: "email_draft",
@@ -260,6 +307,15 @@ export async function decideHardwareIssue(
       [issueId, next, JSON.stringify([evidenceEntry]), status],
     );
     if (updated[0] === undefined) throw new Error("issue status changed during decision");
+    if (claimAssetId !== null) {
+      await appendBotEvent(query, {
+        assetId: claimAssetId,
+        eventType: "claim_filed",
+        issueId,
+        idempotencyKey: `${input.idempotencyKey}:claim_filed`,
+        payload: {},
+      });
+    }
     return { ok: true, value: { issueId, status: next, created: true } };
   });
 }

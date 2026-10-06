@@ -1,3 +1,4 @@
+import { normalizeKind, normalizeSerial, parseAssetId } from "./asset_log.ts";
 import { parseSlackUserId, type SlackUserId } from "./domain.ts";
 
 declare const issueIdBrand: unique symbol;
@@ -47,6 +48,9 @@ export type HardwarePayload = {
   site: string | null;
   dropHeightMm: number | null;
   caption: string | null;
+  serial: string | null;
+  kind: string | null;
+  assetId: string | null;
   photoRefs: PhotoRef[];
 };
 
@@ -61,7 +65,8 @@ export type EvidenceRef =
       subject: string;
       body: string;
       delivery: "outbox_ready";
-    };
+    }
+  | { kind: "asset"; assetId: string; serial: string };
 
 export function parseIssueId(raw: string): IssueId | null {
   if (!UUID_RE.test(raw)) return null;
@@ -107,7 +112,7 @@ export function normalizePhotoRef(input: { slackFileId: string; url: string | nu
   return { slackFileId, url: parsePhotoUrl(input.url) };
 }
 
-const LABELS = "device|site|drop";
+const LABELS = "device|site|drop|serial|kind";
 
 function readLabeled(text: string, label: string): string | null {
   const match = text.match(
@@ -131,17 +136,29 @@ export function parseHardwareCaption(raw: string): {
   site: string | null;
   dropHeightMm: number | null;
   caption: string | null;
+  serial: string | null;
+  kind: string | null;
+  serialInvalid: boolean;
+  kindInvalid: boolean;
 } {
   const caption = raw.trim();
   const labeledDrop = leadingInteger(readLabeled(caption, "drop"));
   const bare = caption.match(/\b(\d+)\s*mm\b/i);
   const bareDrop = bare?.[1] === undefined ? null : Number(bare[1]);
   const dropHeightMm = labeledDrop ?? (bareDrop !== null && Number.isSafeInteger(bareDrop) ? bareDrop : null);
+  const serialLabel = readLabeled(caption, "serial");
+  const serial = serialLabel === null ? null : normalizeSerial(serialLabel);
+  const kindLabel = readLabeled(caption, "kind");
+  const kind = kindLabel === null ? null : normalizeKind(kindLabel);
   return {
     device: readLabeled(caption, "device"),
     site: readLabeled(caption, "site"),
     dropHeightMm,
     caption: caption.length > 0 ? caption : null,
+    serial,
+    kind,
+    serialInvalid: serialLabel !== null && serial === null,
+    kindInvalid: kindLabel !== null && kind === null,
   };
 }
 
@@ -160,7 +177,19 @@ export function readHardwarePayload(value: unknown): HardwarePayload | null {
   const device = readNullableString(value.device);
   const site = readNullableString(value.site);
   const caption = readNullableString(value.caption);
-  if (device === undefined || site === undefined || caption === undefined) return null;
+  const serial = readNormalized(value.serial, normalizeSerial);
+  const kind = readNormalized(value.kind, normalizeKind);
+  const assetId = readAssetId(value.assetId);
+  if (
+    device === undefined ||
+    site === undefined ||
+    caption === undefined ||
+    serial === undefined ||
+    kind === undefined ||
+    assetId === undefined
+  ) {
+    return null;
+  }
   if (!Array.isArray(value.photoRefs)) return null;
   let dropHeightMm: number | null;
   if (value.dropHeightMm === null) {
@@ -183,7 +212,26 @@ export function readHardwarePayload(value: unknown): HardwarePayload | null {
     if (photo === null) return null;
     photoRefs.push(photo);
   }
-  return { device, site, dropHeightMm, caption, photoRefs };
+  return { device, site, dropHeightMm, caption, serial, kind, assetId, photoRefs };
+}
+
+function readNormalized(
+  value: unknown,
+  normalize: (raw: string) => string | null,
+): string | null | undefined {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") return undefined;
+  const normalized = normalize(value);
+  if (normalized === null) return undefined;
+  return normalized;
+}
+
+function readAssetId(value: unknown): string | null | undefined {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") return undefined;
+  const assetId = parseAssetId(value);
+  if (assetId === null) return undefined;
+  return assetId;
 }
 
 export function hardwareCarePlusDraft(input: {
