@@ -2,9 +2,13 @@ import { expect, test } from "bun:test";
 import {
   CHANNEL_ALLOWLIST,
   IT_HELPDESK_CHANNEL_ID,
+  findGrant,
+  grantsWithInbound,
   loadChannelAllowlist,
   mergeChannelGrants,
   parseExtraSlackChannelGrants,
+  resolveInboundGrant,
+  slackListenAllEnabled,
 } from "../src/allowlist.ts";
 import { parseSlackChannelId } from "../src/domain.ts";
 
@@ -46,4 +50,32 @@ test("it-helpdesk is a code grant", () => {
 test("parseSlackChannelId rejects placeholders", () => {
   expect(parseSlackChannelId("CHANNEL_ID_HERE")).toBeNull();
   expect(parseSlackChannelId("C0C5GDWHBNX")).not.toBeNull();
+});
+
+test("slackListenAllEnabled accepts truthy tokens", () => {
+  expect(slackListenAllEnabled({ SLACK_LISTEN_ALL: "true" })).toBe(true);
+  expect(slackListenAllEnabled({ SLACK_LISTEN_ALL: "1" })).toBe(true);
+  expect(slackListenAllEnabled({ SLACK_LISTEN_ALL: "yes" })).toBe(true);
+  expect(slackListenAllEnabled({ SLACK_LISTEN_ALL: "on" })).toBe(true);
+  expect(slackListenAllEnabled({ SLACK_LISTEN_ALL: "false" })).toBe(false);
+  expect(slackListenAllEnabled({})).toBe(false);
+});
+
+test("resolveInboundGrant synthesizes only for slack when listen-all on", () => {
+  const other = parseSlackChannelId("C0LISTEN01");
+  if (other === null) throw new Error("fixture");
+  const env = { SLACK_LISTEN_ALL: "true" };
+  expect(findGrant(CHANNEL_ALLOWLIST, "slack", other)).toBeNull();
+  const grant = resolveInboundGrant(CHANNEL_ALLOWLIST, "slack", other, env);
+  expect(grant).not.toBeNull();
+  expect(grant!).toEqual({ surface: "slack", channelId: other, name: `listen:${other}` });
+  expect(resolveInboundGrant(CHANNEL_ALLOWLIST, "slack", other, {})).toBeNull();
+  const packed = grantsWithInbound(CHANNEL_ALLOWLIST, "slack", other, env);
+  expect(packed).not.toBeNull();
+  expect(packed!.grant).toEqual(grant!);
+  expect(packed!.grants.some((g) => g.channelId === other)).toBe(true);
+  // Existing allowlist channel returns original grants list.
+  const known = CHANNEL_ALLOWLIST[0]!;
+  const knownPacked = grantsWithInbound(CHANNEL_ALLOWLIST, "slack", known.channelId, env);
+  expect(knownPacked?.grants).toBe(CHANNEL_ALLOWLIST);
 });

@@ -109,3 +109,39 @@ export function findGrant(
 ): ChannelGrant | null {
   return grants.find((grant) => grant.surface === surface && grant.channelId === channelId) ?? null;
 }
+
+/** Ops: when true, inbound listen paths synthesize a grant for any Slack channel id. */
+export function slackListenAllEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const raw = (env.SLACK_LISTEN_ALL ?? "").trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
+/**
+ * Inbound listen grant: code/env allowlist first; if SLACK_LISTEN_ALL, synthesize
+ * name listen:<channelId> so ingest can upsert channel_allowlist.
+ * Call sites that still use findGrant() alone stay write/LLM-lane gated.
+ */
+export function resolveInboundGrant(
+  grants: readonly ChannelGrant[],
+  surface: Surface,
+  channelId: ChannelId,
+  env: NodeJS.ProcessEnv = process.env,
+): ChannelGrant | null {
+  const existing = findGrant(grants, surface, channelId);
+  if (existing !== null) return existing;
+  if (surface !== "slack" || !slackListenAllEnabled(env)) return null;
+  return { surface: "slack", channelId, name: `listen:${channelId}` };
+}
+
+/** Ensure bus ensureChannel sees the inbound grant (synthetic appended when needed). */
+export function grantsWithInbound(
+  grants: readonly ChannelGrant[],
+  surface: Surface,
+  channelId: ChannelId,
+  env: NodeJS.ProcessEnv = process.env,
+): { grant: ChannelGrant; grants: readonly ChannelGrant[] } | null {
+  const grant = resolveInboundGrant(grants, surface, channelId, env);
+  if (grant === null) return null;
+  if (findGrant(grants, surface, channelId) !== null) return { grant, grants };
+  return { grant, grants: [...grants, grant] };
+}
