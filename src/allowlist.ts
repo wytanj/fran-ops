@@ -9,9 +9,16 @@ export type ChannelGrant = {
 const ALL_FRAN = parseSlackChannelId("C0C5GDWHBNX");
 if (ALL_FRAN === null) throw new Error("bad all-fran channel id");
 
+const IT_HELPDESK = parseSlackChannelId("C0C6J930A6L");
+if (IT_HELPDESK === null) throw new Error("bad it-helpdesk channel id");
+
+/** `#it-helpdesk`. Hardware issues raise only in this channel. */
+export const IT_HELPDESK_CHANNEL_ID = IT_HELPDESK;
+
 /** Code-owned base grants. CTO edits here for permanent channels. */
 export const CHANNEL_ALLOWLIST: readonly ChannelGrant[] = [
   { surface: "slack", channelId: ALL_FRAN, name: "all-fran" },
+  { surface: "slack", channelId: IT_HELPDESK, name: "it-helpdesk" },
 ];
 
 /**
