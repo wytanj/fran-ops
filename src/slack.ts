@@ -6,6 +6,7 @@ import { handleAppMention, handleCardAction, handleChannelMessage, handleFranCom
 import { handleBillCardAction } from "./bill_handlers.ts";
 import { handleHardwareChannelFile, handleIssueCardAction, type HardwareSlackFile } from "./issue_handlers.ts";
 import { readIssueApproverSlackUserId } from "./issue_domain.ts";
+import { mountHarnessHttp } from "./harness_http.ts";
 import { mountTelegramWebhook } from "./telegram.ts";
 import { publishPending, type SlackPoster } from "./publish.ts";
 import { loadThreadContext, pickThreadTs, replyThreadTs, type SlackRepliesClient } from "./thread.ts";
@@ -167,6 +168,7 @@ export function createSlackApp(opts: {
     socketMode: false,
   });
   mountTelegramWebhook(receiver.app, { db: opts.db, grants, env: opts.env ?? process.env });
+  mountHarnessHttp(receiver.app, { db: opts.db, grants, env: opts.env ?? process.env });
 
   app.event("message", async ({ event, body }) => {
     const hardware = parseHardwareSlackFile(event, body);
