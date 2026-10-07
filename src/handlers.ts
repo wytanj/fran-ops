@@ -1,4 +1,4 @@
-import { findGrant, type ChannelGrant } from "./allowlist.ts";
+import { findGrant, grantsWithInbound, type ChannelGrant } from "./allowlist.ts";
 import { applyStamp, findStaffBySurface, ingestChannelMessage, openFranbirdTell, openTask, recordCardDecision } from "./bus.ts";
 import type { Db } from "./db.ts";
 import {
@@ -177,7 +177,8 @@ export async function handleChannelMessage(
   if (input.bot || input.eventId.trim() === "") return { stored: false };
   const channelId = parseSlackChannelId(input.channelId);
   if (channelId === null) return { stored: false };
-  if (findGrant(grants, "slack", channelId) === null) return { stored: false };
+  const inbound = grantsWithInbound(grants, "slack", channelId);
+  if (inbound === null) return { stored: false };
   let actorStaffId: StaffId | null = null;
   if (input.slackUserId !== null) {
     const slackUserId = parseSlackUserId(input.slackUserId);
@@ -187,7 +188,7 @@ export async function handleChannelMessage(
     }
   }
   const stored = await ingestChannelMessage(db, {
-    grants,
+    grants: inbound.grants,
     surface: "slack",
     channelId,
     actorStaffId,
@@ -207,10 +208,12 @@ export async function handleReaction(
   const channelId = parseSlackChannelId(input.channelId);
   const slackUserId = parseSlackUserId(input.slackUserId);
   if (channelId === null || slackUserId === null || input.messageRef.trim() === "") return { applied: false };
+  const inbound = grantsWithInbound(grants, "slack", channelId);
+  if (inbound === null) return { applied: false };
   const staff = await findStaffBySurface(db, "slack", slackUserId);
   if (staff === null) return { applied: false };
   const result = await applyStamp(db, {
-    grants,
+    grants: inbound.grants,
     surface: "slack",
     channelId,
     messageRef: input.messageRef,
@@ -262,9 +265,11 @@ export async function handleAppMention(
   if (channelId === null || slackUserId === null || input.eventId.trim() === "") {
     return { ok: false, reply: replyFor("bad_payload") };
   }
-  if (findGrant(grants, "slack", channelId) === null) {
+  const inbound = grantsWithInbound(grants, "slack", channelId);
+  if (inbound === null) {
     return { ok: false, reply: replyFor("channel_not_allowlisted") };
   }
+  const effectiveGrants = inbound.grants;
 
   const stripped = input.text
     .replace(/^(?:\s*<@U[A-Z0-9]+(?:\|[^>]+)?>\s*)+/g, "")
@@ -287,7 +292,7 @@ export async function handleAppMention(
   }
 
   if (isBillText(stripped)) {
-    const bill = await handleBillCommand(db, grants, {
+    const bill = await handleBillCommand(db, effectiveGrants, {
       text: stripped,
       slackUserId: input.slackUserId,
       channelId: input.channelId,
@@ -307,7 +312,7 @@ export async function handleAppMention(
     const assignee = await findStaffBySurface(db, "slack", parsed.value.assigneeSlackUserId);
     if (assignee === null) return { ok: false, reply: replyFor("unknown_assignee") };
     const opened = await openFranbirdTell(db, {
-      grants,
+      grants: effectiveGrants,
       openerStaffId: requireStaffId(opener.staffId),
       assigneeStaffId: requireStaffId(assignee.staffId),
       assigneeSlackUserId: parsed.value.assigneeSlackUserId,
@@ -332,7 +337,7 @@ export async function handleAppMention(
   const asTemplate = parseFranText(stripped);
   if (asTemplate.ok) {
     const opened = await openTask(db, {
-      grants,
+      grants: effectiveGrants,
       templateKey: asTemplate.value.templateKey,
       staffId: requireStaffId(opener.staffId),
       surface: "slack",
