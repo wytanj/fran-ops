@@ -607,3 +607,64 @@ export async function recordCardDecision(
     return { ok: true, value: { eventId: row.id, eventType, created: false } };
   });
 }
+
+export type TaskInboxItem = {
+  taskId: string;
+  templateKey: string;
+  title: string;
+  status: TaskStatus;
+  channelSurface: string;
+  channelId: string;
+  openerStaffId: string;
+  assigneeStaffId: string | null;
+  updatedAt: string;
+  role: "assignee" | "opener" | "both";
+};
+
+/** /bird mine equivalent: open-ish tasks for a staff id (assignee or opener). */
+export async function listTaskInbox(
+  db: Db,
+  input: { staffId: StaffId; includeDone?: boolean; limit?: number },
+): Promise<TaskInboxItem[]> {
+  const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+  const includeDone = input.includeDone === true;
+  const rows = await db.query<{
+    id: string;
+    template_key: string;
+    title: string;
+    status: string;
+    channel_surface: string;
+    channel_id: string;
+    opener_staff_id: string;
+    assignee_staff_id: string | null;
+    updated_at: string;
+  }>(
+    `select id, template_key, title, status, channel_surface, channel_id,
+            opener_staff_id, assignee_staff_id, updated_at::text as updated_at
+     from tasks
+     where (assignee_staff_id = $1 or opener_staff_id = $1)
+       and ($2::boolean or status not in ('done', 'handed_off'))
+     order by updated_at desc
+     limit $3`,
+    [input.staffId, includeDone, limit],
+  );
+  return rows.map((row) => {
+    const isAssignee = row.assignee_staff_id === input.staffId;
+    const isOpener = row.opener_staff_id === input.staffId;
+    const role: TaskInboxItem["role"] =
+      isAssignee && isOpener ? "both" : isAssignee ? "assignee" : "opener";
+    return {
+      taskId: row.id,
+      templateKey: row.template_key,
+      title: row.title,
+      status: asTaskStatus(row.status),
+      channelSurface: row.channel_surface,
+      channelId: row.channel_id,
+      openerStaffId: row.opener_staff_id,
+      assigneeStaffId: row.assignee_staff_id,
+      updatedAt: row.updated_at,
+      role,
+    };
+  });
+}
+

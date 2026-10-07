@@ -83,6 +83,10 @@ Always-on bus on a DigitalOcean droplet in `sgp1` (Singapore), Ubuntu 24.04, wit
 
 Canonical host: ops.heyfran.co -> Slack Events at /slack/events. The former .com host had NS issues. Scaffold only; Class C merge of Slack #1 is still after JT install.
 
+## Harness (personal Grok)
+
+Thin signed HTTP + MCP stubs for personal Grok harnesses (issue raise, asset_events append, task inbox). See [docs/harness-mcp.md](docs/harness-mcp.md). Slack stays the human doorbell; Grok is not a peer SoT.
+
 ## Next
 
 `contextpacks/NEXT.md` names the slices that come after this one.
